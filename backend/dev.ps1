@@ -1,4 +1,7 @@
 $ErrorActionPreference = 'Stop'
+if (-not (Get-Command g++ -ErrorAction SilentlyContinue)) {
+    throw 'Native startup needs g++ on PATH. Use the root start.ps1 Docker launcher instead, or install a C++17 compiler.'
+}
 Push-Location $PSScriptRoot
 try {
     New-Item -ItemType Directory -Force build | Out-Null
