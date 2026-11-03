@@ -1,0 +1,2 @@
+# Keep the Unix launcher runnable after cloning on Windows.
+*.sh text eol=lf

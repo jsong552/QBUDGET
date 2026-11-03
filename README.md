@@ -3,43 +3,107 @@
 React + TypeScript + Tailwind frontend, with a separate C++ HTTP API.
 Firebase authentication and database are not configured yet.
 
-## Run locally (Windows)
+## Team quick start (Windows, macOS, Linux)
 
-Open two terminals in the QBUDGET folder.
+**Use Docker for the easiest setup. You do not need to install Node, npm,
+CMake, or a C++ compiler on your laptop.** Docker provides those inside isolated
+Linux containers. The API is still compiled and run as C++.
 
-Terminal 1:
+### 1. One-time setup
+
+1. Install [Docker Desktop](https://docs.docker.com/get-started/get-docker/)
+   for your operating system. On Windows, follow its WSL 2/virtualization setup
+   prompts and use **Linux containers**. On macOS, select the download for your
+   Mac's chip (Apple Silicon or Intel). Linux users can use Docker Desktop or
+   Docker Engine with the Compose v2 plugin.
+2. Start Docker Desktop and wait until its engine is running. On Linux with
+   Docker Engine, ensure your account can run Docker commands.
+3. Clone this repository with Git, or download and extract the full repository.
+   Use your own local folder; there are no machine-specific project paths.
+4. Open a terminal in the **QBUDGET root**, where `compose.yaml` lives.
+
+You need an internet connection for image/package downloads. No Firebase
+account or `.env` file is required for the current hello-world example.
+
+### 2. Start the app
+
+**Windows (PowerShell):**
 
 ```powershell
-cd backend
-.\dev.ps1
+.\start.ps1
 ```
 
-This compiles with g++ (already installed on this computer) and starts the API
-on port 8080. If PowerShell blocks the script, you can run the commands directly:
+**macOS / Linux:**
 
-```powershell
-mkdir build -Force
-g++ -std=c++17 -O2 -pthread -I vendor src/main.cpp -o build/qbudget-api.exe -lws2_32
-.\build\qbudget-api.exe
+```sh
+bash ./start.sh
 ```
 
-Terminal 2:
+Both launchers check Docker/Compose, build the C++ backend, install frontend
+dependencies from `package-lock.json`, and start both services in one terminal.
+The first run may take several minutes. Subsequent builds use Docker's cache;
+`npm ci` still syncs dependencies each time so updates from teammates are picked up.
 
-```powershell
-cd frontend
-npm install
-npm run dev
+If PowerShell blocks scripts, or you prefer a direct command, this works in
+any terminal from the repository root without changing execution policies:
+
+```sh
+docker compose up --build --abort-on-container-exit
 ```
 
-Open http://localhost:5173 and click **Test C++ backend**.
-You should see `Hello from the QBUDGET C++ backend!`.
-Stop each server with Ctrl+C. Restart the backend after changing C++ source.
-No Firebase account, Docker, or CMake is needed for this Windows example.
+### 3. Open and verify
+
+Wait for Vite to report ready, then open **http://localhost:5173** and click
+**Test C++ backend**. You should see:
+
+> Hello from the QBUDGET C++ backend!
+
+The API health check is http://localhost:8080/api/health and should return
+`{"status":"ok"}`. Both published ports are bound to your laptop's loopback
+interface. This is a local development setup, not a production deployment.
+
+### Stop, restart, and edit
+
+- **Stop:** press Ctrl+C in the startup terminal and wait for shutdown.
+  You can also run `docker compose down` from the root in a second terminal.
+- **Start again:** run the same startup script.
+- **React/CSS edits:** save normally; the browser refreshes through Vite.
+  Polling is enabled in Docker to support Windows/macOS file sharing.
+- **C++ edits:** stop and rerun the startup script to rebuild the backend.
+- **After pulling team changes:** stop and rerun the script. The lockfile
+  controls the frontend dependency versions.
+- **Add a frontend package without local npm:** while the app is running, run
+  `docker compose exec frontend npm install PACKAGE_NAME` from the root.
+  Commit both `frontend/package.json` and `frontend/package-lock.json`.
+
+The frontend source is shared with its container, but container dependencies
+live in a named Docker volume, separate from any local `node_modules` folder.
+Do not commit build outputs or `node_modules`.
+
+### Troubleshooting
+
+| Problem | What to do |
+| --- | --- |
+| `docker` not found | Install Docker Desktop, then reopen your terminal. |
+| Cannot connect to Docker daemon | Start Docker Desktop and wait for the engine; on Linux check Docker service/account access. |
+| Compose command missing | Update Docker Desktop, or install the Docker Compose v2 plugin on Linux. |
+| Windows container/image error | Switch Docker Desktop to Linux containers and complete its WSL 2 setup. |
+| Port 5173 or 8080 already in use | Stop any native Vite/C++ servers or other app using those ports, then retry. Do not run native and Docker workflows together. |
+| Download or npm install fails | Check internet/proxy access, read the terminal error, then rerun startup. |
+| Frontend loads but API fails | Check `docker compose logs backend` and the health URL above. Wait for the backend to start. |
+| Docker cannot share the project folder | Allow the folder in Docker Desktop's file-sharing settings, or move the clone to a local folder Docker can access. |
+
+If dependencies appear corrupted, stop the app, run `docker compose down -v`,
+then rerun startup. **This deletes this project's dependency/cache volumes**;
+it does not delete your source. Revisit this command before adding database
+volumes in the future. Docker is required for this recommended workflow; the
+scripts do not install system software automatically.
 
 ## How the request works
 
-The browser calls `/api/hello`. Locally, Vite forwards `/api` requests to
-`http://127.0.0.1:8080`. The C++ route in `backend/src/main.cpp` returns JSON;
+The browser calls `/api/hello`. Vite forwards `/api` requests to the C++ service:
+`http://backend:8080` inside Docker, or `http://127.0.0.1:8080` for native startup.
+The C++ route in `backend/src/main.cpp` returns JSON;
 React displays its message. Node/npm run the frontend tooling; the API itself is C++.
 
 Routes:
@@ -50,7 +114,32 @@ Routes:
 These are public demonstration endpoints, with no stored data or authentication.
 The HTTP library is cpp-httplib, pinned and included in `backend/vendor` with its license.
 
-## Other machines
+## Optional: run natively without Docker
+
+Use this only if you want to manage your own development tools. Install
+[Node.js 24](https://nodejs.org/en/download) (includes npm) and a C++17 compiler.
+For the CMake commands below, also install [CMake](https://cmake.org/download/).
+Suitable compilers include GCC, Clang, or MSVC. For example, Windows users can
+install Visual Studio Build Tools with **Desktop development with C++**, macOS
+users can install Xcode Command Line Tools, and Linux users can install their
+distribution's C++ development packages.
+
+In a first terminal, from the root:
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+In a second terminal, compile and run the backend as below. Keep both terminals
+running and open http://localhost:5173. Stop them with Ctrl+C. Restart/recompile
+after C++ edits. Leave `VITE_API_URL` unset or empty for local development, and
+use the default backend port 8080 to match the Vite proxy.
+
+On Windows with **MinGW g++ on PATH**, `cd backend` then `.\dev.ps1` compiles
+and runs the backend. That optional script specifically requires g++; for
+Visual Studio/MSVC use CMake instead.
 
 With CMake and a C++17 compiler installed, run inside `backend`:
 
@@ -94,7 +183,8 @@ The Vite proxy is local development configuration; production uses VITE_API_URL.
 Nothing has been deployed by this setup. Docker build/deployment requires Docker
 or Railway and is separate from the native Windows build.
 
-Optional local Docker check, inside `backend`:
+Optional backend-only Docker check, inside `backend` (stop the team stack first
+so port 8080 is free):
 
 ```sh
 docker build -t qbudget-api .
@@ -113,6 +203,8 @@ Firestore's REST API). Never put service-account private keys in the frontend or
 in VITE_ environment variables, which are public in the compiled browser bundle.
 
 References:
+- https://docs.docker.com/compose/install/
+- https://docs.docker.com/reference/cli/docker/compose/up/
 - https://vercel.com/docs/functions/runtimes
 - https://docs.railway.com/builds/dockerfiles
 - https://firebase.google.com/docs/auth/admin/verify-id-tokens
