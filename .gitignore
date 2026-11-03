@@ -1,0 +1,5 @@
+backend/build/
+.env
+.env.*
+!.env.example
+.history
