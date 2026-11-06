@@ -1,0 +1,276 @@
+import {
+  Bell,
+  BookOpen,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  GraduationCap,
+  House,
+  Lightbulb,
+  Plus,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react'
+import { useState } from 'react'
+import { Button } from '../components/Button'
+import { Card } from '../components/Card'
+import { IconCircle } from '../components/IconCircle'
+import { PageHeader } from '../components/PageHeader'
+import { SegmentedControl } from '../components/SegmentedControl'
+import { Select, type SelectOption } from '../components/Select'
+import { StatCard } from '../components/StatCard'
+import { Toggle } from '../components/Toggle'
+import { toneClasses, type Tone } from '../components/tones'
+import { useCalendar } from '../hooks/useCalendar'
+import { buildMonthGrid, shiftMonth, weekdayLabels, type CalendarDay } from '../lib/calendar'
+import { formatDate, formatDaysAway, formatMoney } from '../lib/format'
+import { createEvent, updateReminderSettings } from '../services/calendarService'
+import type { CalendarEvent, CalendarEventInput, CalendarMonth, CalendarView, EventKind, IsoDate, ReminderLeadTime, UpcomingEvent } from '../types'
+
+const eventStyles: Record<EventKind, { icon: LucideIcon; tone: Tone }> = {
+  rent: { icon: House, tone: 'danger' },
+  credit_card: { icon: CreditCard, tone: 'info' },
+  tuition: { icon: GraduationCap, tone: 'success' },
+  utilities: { icon: Lightbulb, tone: 'accent' },
+  textbook: { icon: BookOpen, tone: 'plum' },
+}
+
+const viewOptions: { value: CalendarView; label: string }[] = [
+  { value: 'month', label: 'Month' },
+  { value: 'week', label: 'Week' },
+]
+
+const leadTimeOptions: SelectOption<ReminderLeadTime>[] = [
+  { value: '1_day', label: '1 day before' },
+  { value: '3_days', label: '3 days before' },
+  { value: '1_week', label: '1 week before' },
+]
+
+const newEventDraft: CalendarEventInput = { title: '', kind: 'rent', date: '', amountCents: 0, hasReminder: true }
+
+function EventPill({ event }: { event: CalendarEvent }) {
+  const { icon: Icon, tone } = eventStyles[event.kind]
+  return (
+    <span className={`mx-auto flex w-fit items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium whitespace-nowrap ${toneClasses[tone].soft}`}>
+      <Icon className="size-3.5" strokeWidth={2} />
+      {event.shortTitle}
+    </span>
+  )
+}
+
+interface DayCellProps {
+  day: CalendarDay
+  events: CalendarEvent[]
+  isToday: boolean
+  isNextPayment: boolean
+}
+
+function DayCell({ day, events, isToday, isNextPayment }: DayCellProps) {
+  const reminderEvent = events.find((event) => event.hasReminder)
+
+  let numberClass = 'text-ink'
+  if (!day.inMonth) numberClass = 'text-subtle font-normal'
+  else if (isToday) numberClass = 'grid size-6 place-items-center rounded-full bg-primary text-on-primary'
+  else if (isNextPayment) numberClass = 'text-danger'
+
+  return (
+    <td className={`h-[72px] border border-line align-top ${isToday ? 'bg-info-soft' : ''}`}>
+      <div className="relative flex justify-center pt-2.5">
+        <span className={`text-sm font-semibold ${numberClass}`}>{day.dayOfMonth}</span>
+        {reminderEvent && (
+          <span className={`absolute top-2.5 right-3 size-2.5 rounded-full ${toneClasses[eventStyles[reminderEvent.kind].tone].solid}`} />
+        )}
+      </div>
+      <div className="mt-1.5 space-y-1 px-2">
+        {events.map((event) => (
+          <EventPill key={event.id} event={event} />
+        ))}
+      </div>
+    </td>
+  )
+}
+
+function MonthGrid({ calendarMonth, nextPaymentDate }: { calendarMonth: CalendarMonth; nextPaymentDate: IsoDate | undefined }) {
+  const weeks = buildMonthGrid(calendarMonth.month)
+  const eventsByDate = new Map<IsoDate, CalendarEvent[]>()
+  for (const event of calendarMonth.events) {
+    eventsByDate.set(event.date, [...(eventsByDate.get(event.date) ?? []), event])
+  }
+
+  return (
+    <table className="mt-5 w-full table-fixed border-collapse">
+      <thead>
+        <tr>
+          {weekdayLabels.map((label) => (
+            <th key={label} className="border border-line py-2 text-sm font-medium text-ink">
+              {label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {weeks.map((week) => (
+          <tr key={week[0].date}>
+            {week.map((day) => (
+              <DayCell
+                key={day.date}
+                day={day}
+                events={day.inMonth ? (eventsByDate.get(day.date) ?? []) : []}
+                isToday={day.date === calendarMonth.today}
+                isNextPayment={day.date === nextPaymentDate}
+              />
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function UpcomingEventRow({ upcoming }: { upcoming: UpcomingEvent }) {
+  const { event } = upcoming
+  const { icon, tone } = eventStyles[event.kind]
+
+  return (
+    <li className="flex items-center gap-3.5 rounded-xl border border-line px-3 py-2.5">
+      <IconCircle icon={icon} tone={tone} size="sm" />
+      <div className="flex-1">
+        <p className="text-sm font-semibold whitespace-nowrap text-ink">{event.title}</p>
+        <p className="text-[13px] text-muted">{formatDate(event.date)}</p>
+      </div>
+      <div className="text-right">
+        <p className={`text-sm font-bold ${upcoming.isUrgent ? 'text-danger' : 'text-ink'}`}>{formatMoney(event.amountCents)}</p>
+        <p className="text-xs text-muted">{formatDaysAway(upcoming.daysAway)}</p>
+      </div>
+    </li>
+  )
+}
+
+export function CalendarPage() {
+  const [requestedMonth, setRequestedMonth] = useState<IsoDate | null>(null)
+  const [view, setView] = useState<CalendarView>('month')
+  const { summary, calendarMonth, upcoming, reminders, setReminders } = useCalendar(requestedMonth)
+
+  function onPreviousMonth() {
+    if (calendarMonth) setRequestedMonth(shiftMonth(calendarMonth.month, -1))
+  }
+
+  function onNextMonth() {
+    if (calendarMonth) setRequestedMonth(shiftMonth(calendarMonth.month, 1))
+  }
+
+  function onViewChange(nextView: CalendarView) {
+    setView(nextView)
+  }
+
+  function onCreateEvent() {
+    void createEvent(newEventDraft)
+  }
+
+  function onViewAllEvents() {
+    console.info('[ui] view all upcoming events')
+  }
+
+  function onEmailRemindersChange(emailEnabled: boolean) {
+    if (!reminders) return
+    const next = { ...reminders, emailEnabled }
+    setReminders(next)
+    void updateReminderSettings(next)
+  }
+
+  function onLeadTimeChange(leadTime: ReminderLeadTime) {
+    if (!reminders) return
+    const next = { ...reminders, leadTime }
+    setReminders(next)
+    void updateReminderSettings(next)
+  }
+
+  return (
+    <div>
+      <PageHeader
+        dateLabel={summary?.todayLabel}
+        title="Calendar"
+        subtitle="Keep track of your upcoming payments and important financial dates."
+      />
+
+      {summary && (
+        <div className="mt-5 grid grid-cols-3 gap-5">
+          <StatCard
+            tone="danger"
+            icon={CalendarDays}
+            label="Upcoming payments"
+            value={String(summary.upcomingCount)}
+            caption={`In the next ${summary.windowDays} days`}
+          />
+          <StatCard
+            tone="accent"
+            icon={Wallet}
+            label="Total upcoming amount"
+            value={formatMoney(summary.upcomingTotalCents)}
+            caption={`In the next ${summary.windowDays} days`}
+          />
+          <StatCard
+            tone="info"
+            icon={Bell}
+            label="Next payment"
+            value={formatMoney(summary.nextPayment.amountCents)}
+            caption={`${summary.nextPayment.label} • ${formatDate(summary.nextPayment.date)}`}
+          />
+        </div>
+      )}
+
+      <div className="mt-5 grid grid-cols-[2fr_1fr] gap-5">
+        <Card className="px-0 pt-5 pb-0">
+          {calendarMonth && (
+            <>
+              <div className="flex items-center px-5">
+                <h2 className="text-2xl font-bold tracking-tight text-ink">{formatDate(calendarMonth.month, 'monthYear')}</h2>
+                <div className="ml-8 flex gap-5">
+                  <button type="button" aria-label="Previous month" onClick={onPreviousMonth} className="text-ink">
+                    <ChevronLeft className="size-5" />
+                  </button>
+                  <button type="button" aria-label="Next month" onClick={onNextMonth} className="text-ink">
+                    <ChevronRight className="size-5" />
+                  </button>
+                </div>
+                <div className="ml-auto flex items-center gap-4">
+                  <SegmentedControl options={viewOptions} value={view} onChange={onViewChange} />
+                  <Button icon={Plus} onClick={onCreateEvent} className="px-5">
+                    Create event
+                  </Button>
+                </div>
+              </div>
+              <MonthGrid calendarMonth={calendarMonth} nextPaymentDate={summary?.nextPayment.date} />
+            </>
+          )}
+        </Card>
+
+        <Card className="px-5 pt-5 pb-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold tracking-tight text-ink">Upcoming events</h2>
+            <button type="button" onClick={onViewAllEvents} className="flex items-center gap-0.5 text-sm text-muted hover:text-ink">
+              View all <ChevronRight className="size-4" />
+            </button>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {upcoming?.map((item) => (
+              <UpcomingEventRow key={item.event.id} upcoming={item} />
+            ))}
+          </ul>
+
+          {reminders && (
+            <div className="mt-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold tracking-tight text-ink">Email reminders</h3>
+                <Toggle checked={reminders.emailEnabled} label="Email reminders" onChange={onEmailRemindersChange} />
+              </div>
+              <p className="mt-1 text-sm text-muted">Receive email notifications for upcoming payments.</p>
+              <Select label="Reminder timing" value={reminders.leadTime} options={leadTimeOptions} onChange={onLeadTimeChange} className="mt-4" />
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  )
+}
