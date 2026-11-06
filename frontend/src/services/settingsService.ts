@@ -2,14 +2,17 @@ import { mockDisplayPreferences, mockNotificationPreferences, mockUser } from '.
 import type { DisplayPreferences, NotificationKey, NotificationPreference, ProfileInput, User } from '../types'
 import { mockMutation, mockResponse } from './mock'
 
-// BACKEND: GET /api/me
-export function getProfile(): Promise<User> {
-  return mockResponse(mockUser)
-}
-
-// BACKEND: PUT /api/me
-export function updateProfile(input: ProfileInput): Promise<void> {
-  return mockMutation('updateProfile', input)
+// BACKEND: PUT /api/me (returns the updated user)
+export async function updateProfile(input: ProfileInput): Promise<User> {
+  await mockMutation('updateProfile', input)
+  const names = input.fullName.trim().split(/\s+/)
+  return {
+    ...mockUser,
+    fullName: input.fullName,
+    firstName: names[0] ?? '',
+    initials: names.map((name) => name[0]?.toUpperCase() ?? '').join('').slice(0, 2),
+    studentId: input.studentId,
+  }
 }
 
 // BACKEND: POST /api/me/avatar

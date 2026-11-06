@@ -1,4 +1,4 @@
-import { ArrowDown, EllipsisVertical, GraduationCap, House, Plus, TrendingUp, Wallet, type LucideIcon } from 'lucide-react'
+import { ArrowDown, EllipsisVertical, GraduationCap, House, Plus, Target, TrendingUp, Wallet, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../components/Button'
 import { Card, CardHeader } from '../components/Card'
@@ -9,11 +9,11 @@ import { PageHeader } from '../components/PageHeader'
 import { ProgressBar } from '../components/ProgressBar'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { StatCard } from '../components/StatCard'
+import { forecastChartPalette, getChartTone } from '../components/categoryStyles'
 import { toneClasses, type Tone } from '../components/tones'
 import { useForecast } from '../hooks/useForecast'
 import { formatDate, formatMoney } from '../lib/format'
-import { createGoal } from '../services/goalService'
-import type { BudgetGoal, BudgetGoalInput, CategoryBreakdown, ForecastGranularity, GoalKind, MonthlyProjection } from '../types'
+import type { BudgetGoal, BudgetGoalInput, CategoryBreakdown, ForecastGranularity, GoalKind, MonthlyBreakdown } from '../types'
 
 const granularityOptions: { value: ForecastGranularity; label: string }[] = [
   { value: 'weekly', label: 'Weekly' },
@@ -21,20 +21,27 @@ const granularityOptions: { value: ForecastGranularity; label: string }[] = [
   { value: 'semester', label: 'Semester' },
 ]
 
-const categoryTones: Tone[] = ['primary', 'danger', 'accent', 'infoLight', 'plum']
+interface GoalStyle {
+  icon: LucideIcon
+  iconTone: Tone
+  barTone: Tone
+}
 
-const goalStyles: Record<GoalKind, { icon: LucideIcon; iconTone: Tone; barTone: Tone }> = {
+const goalStyles: Partial<Record<GoalKind, GoalStyle>> = {
   savings: { icon: GraduationCap, iconTone: 'success', barTone: 'success' },
   spending_limit: { icon: House, iconTone: 'danger', barTone: 'accent' },
 }
 
+/** Neutral style for goal kinds the UI has no entry for. */
+const fallbackGoalStyle: GoalStyle = { icon: Target, iconTone: 'quiet', barTone: 'quiet' }
+
 const newGoalDraft: BudgetGoalInput = { kind: 'savings', title: '', targetCents: 0 }
 
 function CategoryCard({ breakdown, termLabel }: { breakdown: CategoryBreakdown; termLabel: string }) {
-  const slices = breakdown.items.map((item, i) => ({
+  const slices = breakdown.items.map((item) => ({
     id: item.category.id,
     value: item.amountCents,
-    tone: categoryTones[i % categoryTones.length],
+    tone: getChartTone(forecastChartPalette, item.category.id),
   }))
 
   return (
@@ -58,7 +65,7 @@ function CategoryCard({ breakdown, termLabel }: { breakdown: CategoryBreakdown; 
 }
 
 function GoalRow({ goal, onOpenGoalMenu }: { goal: BudgetGoal; onOpenGoalMenu: (goal: BudgetGoal) => void }) {
-  const style = goalStyles[goal.kind]
+  const style = goalStyles[goal.kind] ?? fallbackGoalStyle
 
   function onMenuClick() {
     onOpenGoalMenu(goal)
@@ -86,7 +93,7 @@ function GoalRow({ goal, onOpenGoalMenu }: { goal: BudgetGoal; onOpenGoalMenu: (
   )
 }
 
-function BreakdownTable({ projections }: { projections: MonthlyProjection[] }) {
+function BreakdownTable({ breakdown }: { breakdown: MonthlyBreakdown }) {
   return (
     <table className="mt-4 w-full text-sm">
       <thead>
@@ -98,7 +105,7 @@ function BreakdownTable({ projections }: { projections: MonthlyProjection[] }) {
         </tr>
       </thead>
       <tbody>
-        {projections.map((row) => (
+        {breakdown.months.map((row) => (
           <tr key={row.month} className="border-b border-line">
             <td className="px-5 py-1.5 text-ink">{formatDate(row.month, 'month')}</td>
             <td className="px-3 py-1.5 text-center text-success">{formatMoney(row.incomeCents)}</td>
@@ -113,35 +120,32 @@ function BreakdownTable({ projections }: { projections: MonthlyProjection[] }) {
 
 export function ForecastPage() {
   const [granularity, setGranularity] = useState<ForecastGranularity>('monthly')
-  const { summary, series, categories, projections, goals } = useForecast(granularity)
+  const { summary, series, categories, breakdown, goals, addGoal } = useForecast(granularity)
 
   function onGranularityChange(next: ForecastGranularity) {
     setGranularity(next)
   }
 
   function onAddGoal() {
-    void createGoal(newGoalDraft)
+    return addGoal(newGoalDraft)
   }
 
   function onOpenGoalMenu(goal: BudgetGoal) {
     console.info('[ui] open goal menu', goal.id)
   }
 
-  const termCaption = summary ? `For ${summary.termLabel} semester` : ''
-
   return (
     <div>
       <PageHeader
-        dateLabel={summary?.todayLabel}
         title="Forecast"
         subtitle="View your spending trends, set goals, and see a prediction of your budget."
       />
 
       {summary && (
         <div className="mt-5 grid grid-cols-3 gap-5">
-          <StatCard tone="success" icon={TrendingUp} label="Projected income" value={formatMoney(summary.projectedIncomeCents)} caption={termCaption} />
-          <StatCard tone="danger" icon={ArrowDown} label="Projected expenses" value={formatMoney(summary.projectedExpensesCents)} caption={termCaption} />
-          <StatCard tone="accent" icon={Wallet} label="Projected balance" value={formatMoney(summary.projectedBalanceCents)} caption="Based on current trends" />
+          <StatCard tone="success" icon={TrendingUp} label="Projected income" value={formatMoney(summary.projectedIncomeCents)} caption={summary.projectedIncomeCaption} />
+          <StatCard tone="danger" icon={ArrowDown} label="Projected expenses" value={formatMoney(summary.projectedExpensesCents)} caption={summary.projectedExpensesCaption} />
+          <StatCard tone="accent" icon={Wallet} label="Projected balance" value={formatMoney(summary.projectedBalanceCents)} caption={summary.projectedBalanceCaption} />
         </div>
       )}
 
@@ -175,8 +179,8 @@ export function ForecastPage() {
           </ul>
         </Card>
         <Card className="px-5 pt-5 pb-4">
-          <CardHeader title="Predicted monthly breakdown" subtitle="Estimated expenses for the next 3 months." />
-          {projections && <BreakdownTable projections={projections} />}
+          <CardHeader title="Predicted monthly breakdown" subtitle={breakdown?.description} />
+          {breakdown && <BreakdownTable breakdown={breakdown} />}
         </Card>
       </div>
     </div>

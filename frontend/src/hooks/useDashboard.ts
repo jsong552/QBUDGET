@@ -6,9 +6,14 @@ import { useAsync } from './useAsync'
 export function useDashboard(range: ActivityRange) {
   const loadActivity = useCallback(() => getSpendingActivity(range), [range])
 
-  const [summary] = useAsync(getDashboardSummary)
-  const [activity] = useAsync(loadActivity)
-  const [categories] = useAsync(getMonthCategoryBreakdown)
+  const summary = useAsync(getDashboardSummary)
+  const activity = useAsync(loadActivity)
+  const categories = useAsync(getMonthCategoryBreakdown)
 
-  return { summary, activity, categories }
+  return {
+    summary: summary.data,
+    activity: activity.data,
+    categories: categories.data,
+    error: summary.error ?? activity.error ?? categories.error,
+  }
 }

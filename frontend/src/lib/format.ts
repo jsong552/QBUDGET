@@ -57,3 +57,14 @@ export function formatDaysAway(days: number): string {
   if (days === 0) return 'Today'
   return days === 1 ? '1 day away' : `${days} days away`
 }
+
+/** Signed money change with a spaced sign, e.g. 24000 -> "+ $240.00", -5000 -> "− $50.00". */
+export function formatMoneyChange(amountCents: number): string {
+  return `${amountCents < 0 ? '−' : '+'} ${formatMoney(Math.abs(amountCents))}`
+}
+
+/** Percentage change with a direction arrow, e.g. 8 -> "↑ 8%", -3 -> "↓ 3%", 0 -> "0%". */
+export function formatPercentChange(percent: number): string {
+  if (percent === 0) return '0%'
+  return `${percent > 0 ? '↑' : '↓'} ${Math.abs(percent)}%`
+}

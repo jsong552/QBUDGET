@@ -1,24 +1,12 @@
-import { useState } from 'react'
 import { Button } from '../components/Button'
-import { getHello } from '../services/healthService'
+import { useBackendCheck } from '../hooks/useBackendCheck'
 
 /** Connection check for the C++ API, at /dev/backend. */
 export function DevBackendPage() {
-  const [message, setMessage] = useState('Click below to call your C++ API.')
-  const [loading, setLoading] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const { message, loading, failed, check } = useBackendCheck()
 
-  async function onTestBackend() {
-    setLoading(true)
-    setFailed(false)
-    try {
-      setMessage(await getHello())
-    } catch (error) {
-      setFailed(true)
-      setMessage(`Could not reach the backend. Make sure it is running. ${error instanceof Error ? error.message : ''}`)
-    } finally {
-      setLoading(false)
-    }
+  function onTestBackend() {
+    return check()
   }
 
   return (

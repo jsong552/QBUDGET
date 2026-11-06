@@ -1,5 +1,15 @@
 const baseUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
+/**
+ * Bearer token sent with every request. AuthProvider keeps it in sync with the session.
+ * Planned: the Firebase ID token, verified by the C++ API. Null while sign-in is mocked, so no header is sent.
+ */
+let authToken: string | null = null
+
+export function setAuthToken(token: string | null) {
+  authToken = token
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -25,7 +35,10 @@ interface RequestOptions {
 export async function apiRequest<T>(path: string, { method = 'GET', body, timeoutMs = 10000 }: RequestOptions = {}): Promise<T> {
   const response = await fetch(`${baseUrl}/api${path}`, {
     method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers: {
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(timeoutMs),
   })

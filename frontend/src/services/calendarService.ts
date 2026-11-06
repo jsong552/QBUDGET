@@ -1,5 +1,5 @@
 import { mockCalendarMonth, mockCalendarSummary, mockReminderSettings, mockUpcomingEvents } from '../data/mockData'
-import type { CalendarEventInput, CalendarMonth, CalendarSummary, IsoDate, ReminderSettings, UpcomingEvent } from '../types'
+import type { CalendarEventInput, CalendarMonth, CalendarSummary, CalendarView, IsoDate, ReminderSettings, UpcomingEvent } from '../types'
 import { mockMutation, mockResponse } from './mock'
 
 // BACKEND: GET /api/calendar/summary
@@ -7,10 +7,10 @@ export function getCalendarSummary(): Promise<CalendarSummary> {
   return mockResponse(mockCalendarSummary)
 }
 
-// BACKEND: GET /api/calendar/events?month=YYYY-MM (no month = current month)
-// The mock always returns September 2024.
-export function getCalendarMonth(month: IsoDate | null): Promise<CalendarMonth> {
-  console.info('[mock] getCalendarMonth', month ?? 'current')
+// BACKEND: GET /api/calendar/events?month=YYYY-MM&view={month|week} (no month = current month)
+// The mock always returns the September 2024 month data, whatever the view.
+export function getCalendarMonth(month: IsoDate | null, view: CalendarView): Promise<CalendarMonth> {
+  console.info('[mock] getCalendarMonth', month ?? 'current', view)
   return mockResponse(mockCalendarMonth)
 }
 

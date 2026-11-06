@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronsUpDown, CirclePlus, Pencil, Search, Trash2, Wallet } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '../components/Button'
 import { Card, CardHeader } from '../components/Card'
 import { CategoryBadge, TransactionTypeBadge } from '../components/CategoryBadge'
@@ -7,9 +7,9 @@ import { PageHeader } from '../components/PageHeader'
 import { Select, type SelectOption } from '../components/Select'
 import { StatCard } from '../components/StatCard'
 import { TextField } from '../components/TextField'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useTransactions } from '../hooks/useTransactions'
-import { formatDate, formatMoney } from '../lib/format'
-import { createTransaction, removeTransaction, updateTransaction } from '../services/transactionService'
+import { formatDate, formatMoney, formatMoneyChange } from '../lib/format'
 import type {
   Category,
   CategoryId,
@@ -21,8 +21,9 @@ import type {
   TransactionTypeFilter,
 } from '../types'
 
-const defaultFilters: TransactionFilters = {
-  search: '',
+const searchDebounceMs = 300
+
+const defaultFilters: Omit<TransactionFilters, 'search'> = {
   type: 'all',
   categoryId: 'all',
   period: 'all_time',
@@ -83,8 +84,8 @@ function categoryOptions(categories: Category[]): SelectOption<CategoryId | 'all
 
 interface TransactionRowProps {
   transaction: Transaction
-  onEditTransaction: (transaction: Transaction) => void
-  onDeleteTransaction: (transaction: Transaction) => void
+  onEditTransaction: (transaction: Transaction) => Promise<boolean>
+  onDeleteTransaction: (transaction: Transaction) => Promise<boolean>
 }
 
 function TransactionRow({ transaction, onEditTransaction, onDeleteTransaction }: TransactionRowProps) {
@@ -152,11 +153,14 @@ function SortHeader({ column, onSortChange }: { column: Column; onSortChange: (k
 }
 
 export function ExpensesPage() {
-  const [filters, setFilters] = useState<TransactionFilters>(defaultFilters)
-  const { summary, transactions, categories } = useTransactions(filters)
+  const [searchText, setSearchText] = useState('')
+  const [filterChoices, setFilters] = useState(defaultFilters)
+  const search = useDebouncedValue(searchText, searchDebounceMs)
+  const filters = useMemo<TransactionFilters>(() => ({ ...filterChoices, search }), [filterChoices, search])
+  const { summary, transactions, categories, addTransaction, editTransaction, deleteTransaction } = useTransactions(filters)
 
-  function onSearchChange(search: string) {
-    setFilters((current) => ({ ...current, search }))
+  function onSearchChange(text: string) {
+    setSearchText(text)
   }
 
   function onTypeFilterChange(type: TransactionTypeFilter) {
@@ -180,20 +184,20 @@ export function ExpensesPage() {
   }
 
   function onAddExpense() {
-    void createTransaction(newExpenseDraft)
+    return addTransaction(newExpenseDraft)
   }
 
   function onEditTransaction(transaction: Transaction) {
-    void updateTransaction(transaction.id, toTransactionInput(transaction))
+    return editTransaction(transaction.id, toTransactionInput(transaction))
   }
 
   function onDeleteTransaction(transaction: Transaction) {
-    void removeTransaction(transaction.id)
+    return deleteTransaction(transaction.id)
   }
 
   return (
     <div>
-      <PageHeader dateLabel={summary?.todayLabel} title="Expenses" subtitle="View, add and manage your income and expenses." />
+      <PageHeader title="Expenses" subtitle="View, add and manage your income and expenses." />
 
       {summary && (
         <div className="mt-6 grid grid-cols-3 gap-5">
@@ -204,7 +208,7 @@ export function ExpensesPage() {
             value={formatMoney(summary.totalIncomeCents)}
             caption={
               <span className="text-success">
-                + {formatMoney(summary.incomeChangeCents)} <span>from last month</span>
+                {formatMoneyChange(summary.incomeChangeCents)} <span>{summary.incomeChangeLabel}</span>
               </span>
             }
           />
@@ -213,7 +217,11 @@ export function ExpensesPage() {
             icon={ArrowDown}
             label="Total expenses"
             value={formatMoney(summary.totalExpensesCents)}
-            caption={<span className="text-danger">+ {formatMoney(summary.expensesChangeCents)} from last month</span>}
+            caption={
+              <span className="text-danger">
+                {formatMoneyChange(summary.expensesChangeCents)} {summary.expensesChangeLabel}
+              </span>
+            }
           />
           <StatCard
             tone="accent"
@@ -243,7 +251,7 @@ export function ExpensesPage() {
             ariaLabel="Search transactions"
             type="search"
             placeholder="Search transactions..."
-            value={filters.search}
+            value={searchText}
             onValueChange={onSearchChange}
             icon={Search}
             size="md"

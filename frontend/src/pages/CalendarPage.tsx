@@ -9,6 +9,7 @@ import {
   House,
   Lightbulb,
   Plus,
+  Tag,
   Wallet,
   type LucideIcon,
 } from 'lucide-react'
@@ -25,15 +26,26 @@ import { toneClasses, type Tone } from '../components/tones'
 import { useCalendar } from '../hooks/useCalendar'
 import { buildMonthGrid, shiftMonth, weekdayLabels, type CalendarDay } from '../lib/calendar'
 import { formatDate, formatDaysAway, formatMoney } from '../lib/format'
-import { createEvent, updateReminderSettings } from '../services/calendarService'
 import type { CalendarEvent, CalendarEventInput, CalendarMonth, CalendarView, EventKind, IsoDate, ReminderLeadTime, UpcomingEvent } from '../types'
 
-const eventStyles: Record<EventKind, { icon: LucideIcon; tone: Tone }> = {
+interface EventStyle {
+  icon: LucideIcon
+  tone: Tone
+}
+
+const eventStyles: Partial<Record<EventKind, EventStyle>> = {
   rent: { icon: House, tone: 'danger' },
   credit_card: { icon: CreditCard, tone: 'info' },
   tuition: { icon: GraduationCap, tone: 'success' },
   utilities: { icon: Lightbulb, tone: 'accent' },
   textbook: { icon: BookOpen, tone: 'plum' },
+}
+
+/** Neutral style for event kinds the UI has no entry for. */
+const fallbackEventStyle: EventStyle = { icon: Tag, tone: 'quiet' }
+
+function getEventStyle(kind: EventKind): EventStyle {
+  return eventStyles[kind] ?? fallbackEventStyle
 }
 
 const viewOptions: { value: CalendarView; label: string }[] = [
@@ -50,7 +62,7 @@ const leadTimeOptions: SelectOption<ReminderLeadTime>[] = [
 const newEventDraft: CalendarEventInput = { title: '', kind: 'rent', date: '', amountCents: 0, hasReminder: true }
 
 function EventPill({ event }: { event: CalendarEvent }) {
-  const { icon: Icon, tone } = eventStyles[event.kind]
+  const { icon: Icon, tone } = getEventStyle(event.kind)
   return (
     <span className={`mx-auto flex w-fit items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium whitespace-nowrap ${toneClasses[tone].soft}`}>
       <Icon className="size-3.5" strokeWidth={2} />
@@ -79,7 +91,7 @@ function DayCell({ day, events, isToday, isNextPayment }: DayCellProps) {
       <div className="relative flex justify-center pt-2.5">
         <span className={`text-sm font-semibold ${numberClass}`}>{day.dayOfMonth}</span>
         {reminderEvent && (
-          <span className={`absolute top-2.5 right-3 size-2.5 rounded-full ${toneClasses[eventStyles[reminderEvent.kind].tone].solid}`} />
+          <span className={`absolute top-2.5 right-3 size-2.5 rounded-full ${toneClasses[getEventStyle(reminderEvent.kind).tone].solid}`} />
         )}
       </div>
       <div className="mt-1.5 space-y-1 px-2">
@@ -130,7 +142,7 @@ function MonthGrid({ calendarMonth, nextPaymentDate }: { calendarMonth: Calendar
 
 function UpcomingEventRow({ upcoming }: { upcoming: UpcomingEvent }) {
   const { event } = upcoming
-  const { icon, tone } = eventStyles[event.kind]
+  const { icon, tone } = getEventStyle(event.kind)
 
   return (
     <li className="flex items-center gap-3.5 rounded-xl border border-line px-3 py-2.5">
@@ -150,7 +162,7 @@ function UpcomingEventRow({ upcoming }: { upcoming: UpcomingEvent }) {
 export function CalendarPage() {
   const [requestedMonth, setRequestedMonth] = useState<IsoDate | null>(null)
   const [view, setView] = useState<CalendarView>('month')
-  const { summary, calendarMonth, upcoming, reminders, setReminders } = useCalendar(requestedMonth)
+  const { summary, calendarMonth, upcoming, reminders, addEvent, changeReminders } = useCalendar(requestedMonth, view)
 
   function onPreviousMonth() {
     if (calendarMonth) setRequestedMonth(shiftMonth(calendarMonth.month, -1))
@@ -165,7 +177,7 @@ export function CalendarPage() {
   }
 
   function onCreateEvent() {
-    void createEvent(newEventDraft)
+    return addEvent(newEventDraft)
   }
 
   function onViewAllEvents() {
@@ -173,23 +185,16 @@ export function CalendarPage() {
   }
 
   function onEmailRemindersChange(emailEnabled: boolean) {
-    if (!reminders) return
-    const next = { ...reminders, emailEnabled }
-    setReminders(next)
-    void updateReminderSettings(next)
+    return changeReminders({ emailEnabled })
   }
 
   function onLeadTimeChange(leadTime: ReminderLeadTime) {
-    if (!reminders) return
-    const next = { ...reminders, leadTime }
-    setReminders(next)
-    void updateReminderSettings(next)
+    return changeReminders({ leadTime })
   }
 
   return (
     <div>
       <PageHeader
-        dateLabel={summary?.todayLabel}
         title="Calendar"
         subtitle="Keep track of your upcoming payments and important financial dates."
       />

@@ -1,6 +1,7 @@
 import {
   BarChart3,
   CalendarDays,
+  Bell,
   Camera,
   LockKeyhole,
   LogOut,
@@ -21,22 +22,15 @@ import { Select, type SelectOption } from '../components/Select'
 import { TextField } from '../components/TextField'
 import { Toggle } from '../components/Toggle'
 import type { Tone } from '../components/tones'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth, useCurrentUser } from '../hooks/useAuth'
 import { useSettings } from '../hooks/useSettings'
-import {
-  deleteAccount,
-  requestPasswordChange,
-  updateDisplayPreferences,
-  updateNotificationPreference,
-  updateProfile,
-  uploadAvatar,
-} from '../services/settingsService'
 import type {
   CurrencyCode,
   DateFormatPreference,
   DisplayPreferences,
   NotificationKey,
   NotificationPreference,
+  ProfileInput,
   ThemePreference,
   User,
   WeekStart,
@@ -64,12 +58,20 @@ const dateFormatOptions: SelectOption<DateFormatPreference>[] = [
   { value: 'YYYY_MM_DD', label: '2024-09-10 (YYYY-MM-DD)' },
 ]
 
-const notificationStyles: Record<NotificationKey, { icon: LucideIcon; tone: Tone }> = {
+interface NotificationStyle {
+  icon: LucideIcon
+  tone: Tone
+}
+
+const notificationStyles: Partial<Record<NotificationKey, NotificationStyle>> = {
   payment_reminders: { icon: CalendarDays, tone: 'danger' },
   forecast_updates: { icon: BarChart3, tone: 'primary' },
   goal_updates: { icon: Tag, tone: 'accent' },
   product_announcements: { icon: Megaphone, tone: 'quiet' },
 }
+
+/** Neutral style for notification keys the UI has no entry for. */
+const fallbackNotificationStyle: NotificationStyle = { icon: Bell, tone: 'quiet' }
 
 function FieldRow({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
@@ -80,16 +82,18 @@ function FieldRow({ label, children }: { label: ReactNode; children: ReactNode }
   )
 }
 
-function AccountCard({ profile }: { profile: User }) {
+interface AccountCardProps {
+  profile: User
+  onSaveProfile: (input: ProfileInput) => Promise<boolean>
+  onChangeAvatar: () => Promise<boolean>
+}
+
+function AccountCard({ profile, onSaveProfile, onChangeAvatar }: AccountCardProps) {
   const [fullName, setFullName] = useState(profile.fullName)
   const [studentId, setStudentId] = useState(profile.studentId ?? '')
 
-  function onSaveProfile() {
-    void updateProfile({ fullName, studentId: studentId || null })
-  }
-
-  function onChangeAvatar() {
-    void uploadAvatar()
+  function onSaveClick() {
+    return onSaveProfile({ fullName, studentId: studentId || null })
   }
 
   return (
@@ -128,7 +132,7 @@ function AccountCard({ profile }: { profile: User }) {
         </div>
       </div>
       <div className="mt-5 flex justify-end">
-        <Button onClick={onSaveProfile} className="px-5">
+        <Button onClick={onSaveClick} className="px-5">
           Save changes
         </Button>
       </div>
@@ -210,7 +214,7 @@ function DisplayCard({ display, onDisplayChange }: DisplayCardProps) {
 }
 
 function NotificationRow({ preference, onToggle }: { preference: NotificationPreference; onToggle: (key: NotificationKey, enabled: boolean) => void }) {
-  const { icon, tone } = notificationStyles[preference.key]
+  const { icon, tone } = notificationStyles[preference.key] ?? fallbackNotificationStyle
 
   function onToggleChange(enabled: boolean) {
     onToggle(preference.key, enabled)
@@ -250,37 +254,36 @@ function ManagementRow({ icon, tone, title, description, action }: ManagementRow
 }
 
 export function SettingsPage() {
-  const { endSession } = useAuth()
-  const { todayLabel, profile, display, setDisplay, notifications, setNotifications } = useSettings()
+  const { signOut } = useAuth()
+  const profile = useCurrentUser()
+  const { display, notifications, saveProfile, changeAvatar, changeDisplay, toggleNotification, changePassword, removeAccount } = useSettings()
 
   function onDisplayChange(changes: Partial<DisplayPreferences>) {
-    setDisplay((current) => (current ? { ...current, ...changes } : current))
-    void updateDisplayPreferences(changes)
+    return changeDisplay(changes)
   }
 
   function onNotificationToggle(key: NotificationKey, enabled: boolean) {
-    setNotifications((current) => current?.map((item) => (item.key === key ? { ...item, enabled } : item)))
-    void updateNotificationPreference(key, enabled)
+    return toggleNotification(key, enabled)
   }
 
   function onChangePassword() {
-    void requestPasswordChange()
+    return changePassword()
   }
 
   function onDeleteAccount() {
-    void deleteAccount()
+    return removeAccount()
   }
 
   function onSignOut() {
-    void endSession()
+    return signOut()
   }
 
   return (
     <div>
-      <PageHeader dateLabel={todayLabel} title="Settings" subtitle="Manage your account, preferences, and notifications." />
+      <PageHeader title="Settings" subtitle="Manage your account, preferences, and notifications." />
 
       <div className="mt-6 grid grid-cols-2 gap-4">
-        {profile ? <AccountCard profile={profile} /> : <div />}
+        <AccountCard profile={profile} onSaveProfile={saveProfile} onChangeAvatar={changeAvatar} />
         {display ? <DisplayCard display={display} onDisplayChange={onDisplayChange} /> : <div />}
 
         <Card className="px-5 pt-5 pb-5">

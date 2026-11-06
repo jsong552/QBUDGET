@@ -6,7 +6,6 @@ import { LoginIllustration } from '../components/LoginIllustration'
 import { Logo } from '../components/Logo'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../hooks/useAuth'
-import { signIn, signUp } from '../services/authService'
 
 type AuthMode = 'signIn' | 'signUp'
 
@@ -47,7 +46,7 @@ function ModeTab({ tab, selected, onSelect }: { tab: (typeof modeTabs)[number]; 
 }
 
 export function LoginPage() {
-  const { session, demoEnabled, startDemo } = useAuth()
+  const { session, demoEnabled, signIn, signUp, continueAsDemo } = useAuth()
   const navigate = useNavigate()
   const [mode, setMode] = useState<AuthMode>('signIn')
   const [email, setEmail] = useState('')
@@ -59,14 +58,23 @@ export function LoginPage() {
     setMode(nextMode)
   }
 
-  function onSubmitCredentials() {
+  async function onSubmitCredentials() {
     const request = { email, password }
-    void (mode === 'signIn' ? signIn(request) : signUp(request))
+    try {
+      await (mode === 'signIn' ? signIn(request) : signUp(request))
+      navigate('/', { replace: true })
+    } catch (failure) {
+      console.error('[auth] sign-in failed', failure)
+    }
   }
 
   async function onContinueToDemo() {
-    await startDemo()
-    navigate('/', { replace: true })
+    try {
+      await continueAsDemo()
+      navigate('/', { replace: true })
+    } catch (failure) {
+      console.error('[auth] demo sign-in failed', failure)
+    }
   }
 
   return (

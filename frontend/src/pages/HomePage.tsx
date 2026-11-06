@@ -6,10 +6,11 @@ import { PageHeader } from '../components/PageHeader'
 import { ProgressBar } from '../components/ProgressBar'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SpendingActivityChart } from '../components/SpendingActivityChart'
+import { getChartTone, homeChartPalette } from '../components/categoryStyles'
 import { toneClasses, type Tone } from '../components/tones'
 import { useCurrentUser } from '../hooks/useAuth'
 import { useDashboard } from '../hooks/useDashboard'
-import { formatDate, formatMoney } from '../lib/format'
+import { formatDate, formatMoney, formatPercentChange } from '../lib/format'
 import type { ActivityRange, BudgetStatus, CategoryBreakdown, DashboardSummary } from '../types'
 
 const rangeOptions: { value: ActivityRange; label: string }[] = [
@@ -23,8 +24,6 @@ const statusLabels: Record<BudgetStatus, string> = {
   at_risk: 'At risk',
   over_budget: 'Over budget',
 }
-
-const categoryTones: Tone[] = ['primary', 'danger', 'accent', 'quiet']
 
 function BalanceCard({ summary }: { summary: DashboardSummary }) {
   return (
@@ -69,10 +68,10 @@ function MiniStatCard({ tone, icon: Icon, label, value, caption }: MiniStatCardP
 }
 
 function CategoryCard({ breakdown, onViewAllCategories }: { breakdown: CategoryBreakdown; onViewAllCategories: () => void }) {
-  const slices = breakdown.items.map((item, i) => ({
+  const slices = breakdown.items.map((item) => ({
     id: item.category.id,
     value: item.amountCents,
-    tone: categoryTones[i % categoryTones.length],
+    tone: getChartTone(homeChartPalette, item.category.id),
   }))
 
   return (
@@ -118,11 +117,12 @@ export function HomePage() {
   return (
     <div>
       <PageHeader
-        dateLabel={summary?.todayLabel}
         title={
-          <>
-            Good morning, <span className="text-primary">{user.firstName}.</span>
-          </>
+          summary && (
+            <>
+              {summary.greeting}, <span className="text-primary">{user.firstName}.</span>
+            </>
+          )
         }
         subtitle="Here's how your semester budget is looking."
       />
@@ -135,7 +135,7 @@ export function HomePage() {
             icon={CreditCard}
             label="Spent this month"
             value={formatMoney(summary.spentThisMonthCents)}
-            caption={`↑ ${summary.spentChangePercent}% from ${summary.comparedToMonthLabel}`}
+            caption={`${formatPercentChange(summary.spentChangePercent)} ${summary.spentChangeLabel}`}
           />
           <MiniStatCard
             tone="accent"

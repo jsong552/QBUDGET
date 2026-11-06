@@ -10,7 +10,7 @@ import type {
   DisplayPreferences,
   ForecastSeries,
   ForecastSummary,
-  MonthlyProjection,
+  MonthlyBreakdown,
   NotificationPreference,
   ReminderSettings,
   SpendingActivity,
@@ -57,7 +57,7 @@ export const mockCategories: Category[] = [
 // ---------- Dashboard ----------
 
 export const mockDashboardSummary: DashboardSummary = {
-  todayLabel: 'Tuesday, September 16',
+  greeting: 'Good morning',
   availableBalanceCents: 124860,
   periodEnd: '2024-10-01',
   budgetStatus: 'on_track',
@@ -66,7 +66,7 @@ export const mockDashboardSummary: DashboardSummary = {
   spentPercent: 38,
   spentThisMonthCents: 75140,
   spentChangePercent: 8,
-  comparedToMonthLabel: 'August',
+  spentChangeLabel: 'from August',
   dailyAllowanceCents: 8324,
   daysRemaining: 15,
 }
@@ -99,11 +99,12 @@ export const mockMonthCategoryBreakdown: CategoryBreakdown = {
 // ---------- Transactions ----------
 
 export const mockTransactionSummary: TransactionSummary = {
-  todayLabel: 'Tuesday, September 10',
   totalIncomeCents: 234000,
   incomeChangeCents: 24000,
+  incomeChangeLabel: 'from last month',
   totalExpensesCents: 109140,
   expensesChangeCents: 12050,
+  expensesChangeLabel: 'from last month',
   remainingBalanceCents: 124860,
   periodEnd: '2024-10-01',
 }
@@ -119,10 +120,12 @@ export const mockTransactions: Transaction[] = [
 // ---------- Forecast ----------
 
 export const mockForecastSummary: ForecastSummary = {
-  todayLabel: 'Tuesday, September 10',
   projectedIncomeCents: 850000,
+  projectedIncomeCaption: 'For Fall 2024 semester',
   projectedExpensesCents: 725140,
+  projectedExpensesCaption: 'For Fall 2024 semester',
   projectedBalanceCents: 124860,
+  projectedBalanceCaption: 'Based on current trends',
   termLabel: 'Fall 2024',
 }
 
@@ -162,12 +165,15 @@ export const mockBudgetGoals: BudgetGoal[] = [
   { id: 'goal-2', kind: 'spending_limit', title: 'Keep monthly expenses under $1,000', currentCents: 75100, targetCents: 100000, percent: 75 },
 ]
 
-export const mockMonthlyProjections: MonthlyProjection[] = [
-  { month: '2024-09-01', incomeCents: 234000, expensesCents: 109140, projectedBalanceCents: 124860 },
-  { month: '2024-10-01', incomeCents: 200000, expensesCents: 135000, projectedBalanceCents: 189860 },
-  { month: '2024-11-01', incomeCents: 200000, expensesCents: 142000, projectedBalanceCents: 247860 },
-  { month: '2024-12-01', incomeCents: 216000, expensesCents: 152000, projectedBalanceCents: 311860 },
-]
+export const mockMonthlyBreakdown: MonthlyBreakdown = {
+  description: 'Estimated expenses for the next 3 months.',
+  months: [
+    { month: '2024-09-01', incomeCents: 234000, expensesCents: 109140, projectedBalanceCents: 124860 },
+    { month: '2024-10-01', incomeCents: 200000, expensesCents: 135000, projectedBalanceCents: 189860 },
+    { month: '2024-11-01', incomeCents: 200000, expensesCents: 142000, projectedBalanceCents: 247860 },
+    { month: '2024-12-01', incomeCents: 216000, expensesCents: 152000, projectedBalanceCents: 311860 },
+  ],
+}
 
 // ---------- Calendar ----------
 
@@ -181,7 +187,6 @@ const calendarEvents = {
 } satisfies Record<string, CalendarEvent>
 
 export const mockCalendarSummary: CalendarSummary = {
-  todayLabel: 'Tuesday, September 10',
   upcomingCount: 3,
   upcomingTotalCents: 172000,
   windowDays: 30,

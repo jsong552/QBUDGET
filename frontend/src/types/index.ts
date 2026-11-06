@@ -5,6 +5,8 @@
  * - All money values are integer cents (`...Cents`). Expenses are negative where a value is signed.
  * - Dates are ISO strings (`YYYY-MM-DD`).
  * - Percentages are whole numbers (0-100) calculated by the API.
+ * - Key unions (CategoryId, EventKind, ...) list the values the UI has styles for. Other strings are allowed and
+ *   render with a neutral fallback style.
  */
 
 export type IsoDate = string
@@ -22,6 +24,8 @@ export interface User {
 
 export interface Session {
   user: User
+  /** Bearer token for API calls (planned: Firebase ID token). Null for the mock and demo sessions. */
+  token: string | null
 }
 
 export interface SignInRequest {
@@ -41,6 +45,7 @@ export type CategoryId =
   | 'utilities'
   | 'income'
   | 'other'
+  | (string & {})
 
 export interface Category {
   id: CategoryId
@@ -64,8 +69,8 @@ export interface CategoryBreakdown {
 export type BudgetStatus = 'on_track' | 'at_risk' | 'over_budget'
 
 export interface DashboardSummary {
-  /** Display label for the current day, e.g. "Tuesday, September 16". */
-  todayLabel: string
+  /** e.g. "Good morning" (the page appends the user's first name). */
+  greeting: string
   availableBalanceCents: number
   periodEnd: IsoDate
   budgetStatus: BudgetStatus
@@ -74,8 +79,10 @@ export interface DashboardSummary {
   /** Share of the budget already spent, 0-100. */
   spentPercent: number
   spentThisMonthCents: number
+  /** Signed: positive = spent more than the comparison period. */
   spentChangePercent: number
-  comparedToMonthLabel: string
+  /** e.g. "from August". */
+  spentChangeLabel: string
   dailyAllowanceCents: number
   daysRemaining: number
 }
@@ -109,11 +116,15 @@ export interface Transaction {
 }
 
 export interface TransactionSummary {
-  todayLabel: string
   totalIncomeCents: number
+  /** Signed change vs the comparison period. */
   incomeChangeCents: number
+  /** e.g. "from last month". */
+  incomeChangeLabel: string
   totalExpensesCents: number
+  /** Signed change vs the comparison period. */
   expensesChangeCents: number
+  expensesChangeLabel: string
   remainingBalanceCents: number
   periodEnd: IsoDate
 }
@@ -142,10 +153,13 @@ export interface TransactionInput {
 // ---------- Forecast ----------
 
 export interface ForecastSummary {
-  todayLabel: string
   projectedIncomeCents: number
+  projectedIncomeCaption: string
   projectedExpensesCents: number
+  projectedExpensesCaption: string
   projectedBalanceCents: number
+  projectedBalanceCaption: string
+  /** e.g. "Fall 2024". */
   termLabel: string
 }
 
@@ -166,7 +180,13 @@ export interface MonthlyProjection {
   projectedBalanceCents: number
 }
 
-export type GoalKind = 'savings' | 'spending_limit'
+export interface MonthlyBreakdown {
+  /** e.g. "Estimated expenses for the next 3 months." */
+  description: string
+  months: MonthlyProjection[]
+}
+
+export type GoalKind = 'savings' | 'spending_limit' | (string & {})
 
 export interface BudgetGoal {
   id: string
@@ -186,7 +206,7 @@ export interface BudgetGoalInput {
 
 // ---------- Calendar ----------
 
-export type EventKind = 'rent' | 'credit_card' | 'tuition' | 'utilities' | 'textbook'
+export type EventKind = 'rent' | 'credit_card' | 'tuition' | 'utilities' | 'textbook' | (string & {})
 
 export interface CalendarEvent {
   id: string
@@ -206,7 +226,6 @@ export interface UpcomingEvent {
 }
 
 export interface CalendarSummary {
-  todayLabel: string
   upcomingCount: number
   upcomingTotalCents: number
   windowDays: number
@@ -260,7 +279,7 @@ export interface DisplayPreferences {
   dateFormat: DateFormatPreference
 }
 
-export type NotificationKey = 'payment_reminders' | 'forecast_updates' | 'goal_updates' | 'product_announcements'
+export type NotificationKey = 'payment_reminders' | 'forecast_updates' | 'goal_updates' | 'product_announcements' | (string & {})
 
 export interface NotificationPreference {
   key: NotificationKey

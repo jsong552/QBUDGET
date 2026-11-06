@@ -1,5 +1,5 @@
-import { mockForecastSeries, mockForecastSummary, mockMonthlyProjections, mockTermCategoryBreakdown } from '../data/mockData'
-import type { CategoryBreakdown, ForecastGranularity, ForecastSeries, ForecastSummary, MonthlyProjection } from '../types'
+import { mockForecastSeries, mockForecastSummary, mockMonthlyBreakdown, mockTermCategoryBreakdown } from '../data/mockData'
+import type { CategoryBreakdown, ForecastGranularity, ForecastSeries, ForecastSummary, MonthlyBreakdown } from '../types'
 import { mockResponse } from './mock'
 
 // BACKEND: GET /api/forecast/summary
@@ -19,6 +19,6 @@ export function getForecastCategoryBreakdown(): Promise<CategoryBreakdown> {
 }
 
 // BACKEND: GET /api/forecast/monthly?months=4
-export function getMonthlyProjections(): Promise<MonthlyProjection[]> {
-  return mockResponse(mockMonthlyProjections)
+export function getMonthlyBreakdown(): Promise<MonthlyBreakdown> {
+  return mockResponse(mockMonthlyBreakdown)
 }
