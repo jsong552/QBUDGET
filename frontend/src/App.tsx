@@ -3,6 +3,7 @@ import { AppLayout } from './components/AppLayout'
 import { RequireAuth } from './components/RequireAuth'
 import { AuthProvider } from './context/AuthProvider'
 import { CalendarPage } from './pages/CalendarPage'
+import { DevBackendPage } from './pages/DevBackendPage'
 import { ExpensesPage } from './pages/ExpensesPage'
 import { ForecastPage } from './pages/ForecastPage'
 import { HomePage } from './pages/HomePage'
@@ -15,6 +16,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/dev/backend" element={<DevBackendPage />} />
           <Route
             element={
               <RequireAuth>

@@ -84,9 +84,6 @@ export const mockSpendingActivity: Omit<SpendingActivity, 'range'> = {
     { date: '2024-09-15', amountCents: 59000 },
   ],
   highlight: { date: '2024-09-12', amountCents: 39000 },
-  axisMaxCents: 60000,
-  axisStepCents: 20000,
-  axisLabels: ['2024-09-01', '2024-09-05', '2024-09-10', '2024-09-15'],
 }
 
 export const mockMonthCategoryBreakdown: CategoryBreakdown = {
@@ -147,9 +144,6 @@ export const mockForecastSeries: Omit<ForecastSeries, 'granularity'> = {
     { date: '2024-11-01', amountCents: 120000 },
     { date: '2024-12-01', amountCents: 150000 },
   ],
-  axisMaxCents: 200000,
-  axisStepCents: 50000,
-  axisLabels: ['2024-09-01', '2024-10-01', '2024-11-01', '2024-12-01'],
 }
 
 export const mockTermCategoryBreakdown: CategoryBreakdown = {

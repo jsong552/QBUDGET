@@ -1,54 +1,80 @@
 import type { IsoDate } from '../types'
 import { parseIsoDate } from './format'
 
-export interface ChartPoint {
-  x: number
-  y: number
+const dayMs = 24 * 60 * 60 * 1000
+
+/** Converts an ISO date to a timestamp for a numeric (time) chart axis. */
+export function toTimestamp(date: IsoDate): number {
+  return parseIsoDate(date).getTime()
 }
 
-/** Smooth path through the points (Catmull-Rom converted to cubic Béziers). */
-export function smoothPath(points: ChartPoint[]): string {
-  if (points.length === 0) return ''
-  let path = `M ${points[0].x} ${points[0].y}`
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i - 1] ?? points[i]
-    const p1 = points[i]
-    const p2 = points[i + 1]
-    const p3 = points[i + 2] ?? p2
-    const c1x = p1.x + (p2.x - p0.x) / 6
-    const c1y = p1.y + (p2.y - p0.y) / 6
-    const c2x = p2.x - (p3.x - p1.x) / 6
-    const c2y = p2.y - (p3.y - p1.y) / 6
-    path += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`
+/** [start, end] of a time axis. Widens a single point by a day each way and falls back to today for no points. */
+export function timeDomain(times: number[]): [number, number] {
+  if (times.length === 0) {
+    const now = Date.now()
+    return [now - dayMs, now]
   }
-  return path
+  const start = Math.min(...times)
+  const end = Math.max(...times)
+  return start === end ? [start - dayMs, end + dayMs] : [start, end]
 }
 
-/** Straight-segment path through the points. */
-export function linePath(points: ChartPoint[]): string {
-  return points.map((point, i) => `${i === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
+/**
+ * Evenly spaced, round tick values (in cents) from 0 up to at least `maxValue`,
+ * e.g. max 59000 with 3 intervals -> [0, 20000, 40000, 60000]. Steps are at least $1 so labels never repeat.
+ */
+export function valueTicks(maxValue: number, intervals: number): number[] {
+  const safeMax = maxValue > 0 ? maxValue : 10000
+  const rawStep = Math.max(safeMax / intervals, 100)
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep))
+  const step = [1, 2, 2.5, 5, 10].map((factor) => factor * magnitude).find((candidate) => candidate >= rawStep) ?? 10 * magnitude
+  const count = Math.ceil(safeMax / step)
+  return Array.from({ length: count + 1 }, (_, i) => i * step)
 }
 
-/** Closes a line path down to the baseline so it can be filled. */
-export function areaPath(line: string, points: ChartPoint[], baselineY: number): string {
-  if (points.length === 0) return ''
-  return `${line} L ${points[points.length - 1].x} ${baselineY} L ${points[0].x} ${baselineY} Z`
+export type DateTickUnit = 'day' | 'month' | 'monthYear'
+
+export interface DateTicks {
+  ticks: number[]
+  unit: DateTickUnit
 }
 
-/** Maps dates onto a horizontal pixel range. */
-export function dateScale(start: IsoDate, end: IsoDate, left: number, right: number) {
-  const startMs = parseIsoDate(start).getTime()
-  const span = parseIsoDate(end).getTime() - startMs || 1
-  return (date: IsoDate) => left + ((parseIsoDate(date).getTime() - startMs) / span) * (right - left)
+/**
+ * Readable date ticks between two timestamps (inclusive of the start).
+ * Spans over ~2 months tick on the 1st of each month; shorter spans tick on round days (1, 5, 10, 15 ...).
+ */
+export function dateTicks(startMs: number, endMs: number, maxTicks = 5): DateTicks {
+  const start = new Date(startMs)
+  const spanDays = Math.max((endMs - startMs) / dayMs, 0)
+
+  if (spanDays > 62) {
+    const ticks: number[] = []
+    const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1))
+    if (cursor.getTime() < startMs) cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+    while (cursor.getTime() <= endMs) {
+      ticks.push(cursor.getTime())
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+    }
+    const stride = Math.ceil(ticks.length / maxTicks)
+    return { ticks: ticks.filter((_, i) => i % stride === 0), unit: spanDays > 366 ? 'monthYear' : 'month' }
+  }
+
+  const step = [1, 2, 5, 7, 10, 14, 15].find((candidate) => spanDays / candidate <= maxTicks - 1) ?? 15
+  const ticks = [startMs]
+  for (let t = startMs + dayMs; t <= endMs; t += dayMs) {
+    const dayOfMonth = new Date(t).getUTCDate()
+    const onStep = step === 7 || step === 14 ? Math.round((t - startMs) / dayMs) % step === 0 : dayOfMonth % step === 0
+    if (onStep && t - ticks[ticks.length - 1] >= step * dayMs * 0.75) ticks.push(t)
+  }
+  return { ticks, unit: 'day' }
 }
 
-/** Maps cents onto a vertical pixel range (0 at the bottom). */
-export function valueScale(maxCents: number, top: number, bottom: number) {
-  return (cents: number) => bottom - (cents / maxCents) * (bottom - top)
+const tickFormatters: Record<DateTickUnit, Intl.DateTimeFormat> = {
+  day: new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+  month: new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }),
+  monthYear: new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }),
 }
 
-export function axisTicks(maxCents: number, stepCents: number): number[] {
-  const ticks: number[] = []
-  for (let value = 0; value <= maxCents; value += stepCents) ticks.push(value)
-  return ticks
+export function formatDateTick(timestamp: number, unit: DateTickUnit): string {
+  return tickFormatters[unit].format(new Date(timestamp))
 }

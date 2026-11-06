@@ -17,7 +17,7 @@ export function signOut(): Promise<void> {
   return mockMutation('signOut')
 }
 
-/** Demo session used when VITE_AUTH_BYPASS=true. */
+/** Demo session used by the "Continue to demo" button in development. */
 // BACKEND: replaced by GET /api/auth/session once sign-in is live
 export function getDemoSession(): Promise<Session> {
   return mockResponse({ user: mockUser })

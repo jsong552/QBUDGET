@@ -27,7 +27,6 @@ export async function apiRequest<T>(path: string, { method = 'GET', body, timeou
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
-    credentials: 'include',
     signal: AbortSignal.timeout(timeoutMs),
   })
 

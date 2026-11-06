@@ -90,11 +90,8 @@ export interface SeriesPoint {
 export interface SpendingActivity {
   range: ActivityRange
   points: SeriesPoint[]
-  /** Point to emphasise on the chart, if any. */
+  /** Point to emphasise on the chart, if any. Should match one of `points`. */
   highlight: SeriesPoint | null
-  axisMaxCents: number
-  axisStepCents: number
-  axisLabels: IsoDate[]
 }
 
 // ---------- Transactions ----------
@@ -160,9 +157,6 @@ export interface ForecastSeries {
   expenses: SeriesPoint[]
   /** Continues the expenses line; its first point repeats the last actual expense point. */
   projectedExpenses: SeriesPoint[]
-  axisMaxCents: number
-  axisStepCents: number
-  axisLabels: IsoDate[]
 }
 
 export interface MonthlyProjection {

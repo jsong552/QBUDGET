@@ -3,7 +3,8 @@ import { getDemoSession, signOut } from '../services/authService'
 import type { Session } from '../types'
 import { AuthContext, type AuthContextValue } from './authContext'
 
-const demoEnabled = import.meta.env.VITE_AUTH_BYPASS === 'true'
+// On in development unless VITE_AUTH_BYPASS is explicitly "false"; never in production builds.
+const demoEnabled = import.meta.env.DEV && import.meta.env.VITE_AUTH_BYPASS !== 'false'
 const storageKey = 'qbudget.demoSession'
 
 function readStoredSession(): Session | null {

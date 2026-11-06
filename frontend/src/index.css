@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-@theme {
+/* static: emit every token so charts can read them as CSS variables */
+@theme static {
   --font-sans: "DM Sans", system-ui, sans-serif;
 
   --color-canvas: #f4f6fb;
