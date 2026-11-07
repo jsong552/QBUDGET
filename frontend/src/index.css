@@ -1,9 +1,61 @@
 @import "tailwindcss";
 
+/* static: emit every token so charts can read them as CSS variables */
+@theme static {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+
+  --color-canvas: #f4f6fb;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f2f4f8;
+  --color-surface-disabled: #eceef2;
+  --color-line: #e3e7ee;
+  --color-line-strong: #d3d9e3;
+
+  --color-ink: #12234a;
+  --color-muted: #6b7891;
+  --color-subtle: #9aa4b6;
+
+  --color-sidebar: #1b3a6b;
+  --color-sidebar-raised: #2a4c80;
+  --color-sidebar-active: #2d4d7f;
+  --color-on-sidebar: #ffffff;
+  --color-on-sidebar-muted: #c9d4e6;
+
+  --color-primary: #1b3a6b;
+  --color-primary-hover: #15305a;
+  --color-on-primary: #ffffff;
+
+  --color-accent: #f5c116;
+  --color-accent-soft: #fdf4d6;
+  --color-accent-ink: #b7860b;
+  --color-on-accent: #12234a;
+
+  --color-danger: #dc2b4a;
+  --color-danger-soft: #fde8ec;
+
+  --color-success: #17a35e;
+  --color-success-soft: #e3f6ec;
+
+  --color-info: #3b82f6;
+  --color-info-soft: #e6effd;
+  --color-info-light: #93bdf0;
+
+  --color-plum: #9b6ddc;
+  --color-plum-soft: #efe8fb;
+
+  --color-quiet: #a3abb9;
+  --color-quiet-soft: #eef0f4;
+
+  --shadow-card: 0 1px 3px rgb(18 35 74 / 0.06), 0 1px 2px rgb(18 35 74 / 0.03);
+}
+
 :root {
-  font-family: system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
-body { margin: 0; }
+
+body {
+  margin: 0;
+  @apply bg-canvas font-sans text-ink;
+}

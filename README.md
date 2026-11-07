@@ -53,7 +53,7 @@ docker compose up --build --abort-on-container-exit
 
 ### 3. Open and verify
 
-Wait for Vite to report ready, then open **http://localhost:5173** and click
+Wait for Vite to report ready, then open **http://localhost:5173/dev/backend** and click
 **Test C++ backend**. You should see:
 
 > Hello from the QBUDGET C++ backend!
