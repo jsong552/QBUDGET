@@ -12,6 +12,8 @@ interface TextFieldProps {
   defaultValue?: string
   onValueChange?: (value: string) => void
   disabled?: boolean
+  required?: boolean
+  autoComplete?: string
   icon?: LucideIcon
   size?: 'md' | 'lg'
   className?: string
@@ -26,6 +28,8 @@ export function TextField({
   defaultValue,
   onValueChange,
   disabled = false,
+  required = false,
+  autoComplete,
   icon: Icon,
   size = 'lg',
   className = '',
@@ -54,6 +58,8 @@ export function TextField({
           defaultValue={defaultValue}
           onChange={onInputChange}
           disabled={disabled}
+          required={required}
+          autoComplete={autoComplete}
           className={`${size === 'lg' ? 'h-12' : 'h-11'} w-full rounded-lg border border-line-strong bg-surface pr-4 text-[15px] text-ink outline-none placeholder:text-subtle focus:border-primary disabled:bg-surface-disabled disabled:text-muted ${
             Icon ? 'pl-12' : 'pl-4'
           }`}

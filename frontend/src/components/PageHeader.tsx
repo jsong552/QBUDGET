@@ -1,5 +1,6 @@
 import { Bell } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router'
 import { useCurrentUser } from '../hooks/useAuth'
 import { useNotifications } from '../hooks/useNotifications'
 import { useTodayLabel } from '../hooks/useTodayLabel'
@@ -10,16 +11,18 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle }: PageHeaderProps) {
+  const navigate = useNavigate()
+  const [showNotifications, setShowNotifications] = useState(false)
   const user = useCurrentUser()
   const dateLabel = useTodayLabel()
   const notifications = useNotifications()
 
   function onOpenNotifications() {
-    console.info('[ui] open notifications', notifications)
+    setShowNotifications((shown) => !shown)
   }
 
   function onOpenProfileMenu() {
-    console.info('[ui] open profile menu', user.id)
+    navigate('/settings')
   }
 
   return (
@@ -29,7 +32,11 @@ export function PageHeader({ title, subtitle }: PageHeaderProps) {
         <h1 className="mt-1 min-h-[1.25em] text-[34px] leading-tight font-bold tracking-tight text-ink">{title}</h1>
         <p className="mt-1 text-[15px] text-muted">{subtitle}</p>
       </div>
-      <div className="mt-4 flex items-center gap-4">
+      <div className="relative mt-4 flex items-center gap-4">
+        {showNotifications && <div className="absolute top-14 right-0 z-20 w-80 rounded-lg border border-line bg-surface p-4 shadow-lg" role="region" aria-label="Payment reminders">
+          <h2 className="font-bold">Payment reminders</h2>
+          {notifications.length ? <ul>{notifications.map((n) => <li key={n.id} className="mt-3 text-sm">{n.message}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No payment reminders due.</p>}
+        </div>}
         <button
           type="button"
           aria-label="Notifications"

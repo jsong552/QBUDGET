@@ -1,8 +1,3 @@
-import { mockNotifications } from '../data/mockData'
+import { apiClient } from '../lib/apiClient'
 import type { AppNotification } from '../types'
-import { mockResponse } from './mock'
-
-// BACKEND: GET /api/notifications
-export function listNotifications(): Promise<AppNotification[]> {
-  return mockResponse(mockNotifications)
-}
+export const listNotifications = () => apiClient.get<AppNotification[]>('/notifications')

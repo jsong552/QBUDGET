@@ -1,5 +1,7 @@
 /**
  * Shared data types. These describe the shapes the API is expected to return.
+ * Core C++ counterparts: backend/src/models.hpp. Storage and ownership rules:
+ * docs/data-model.md. Keep both definitions aligned when changing the API.
  *
  * Conventions:
  * - All money values are integer cents (`...Cents`). Expenses are negative where a value is signed.
@@ -14,6 +16,7 @@ export type IsoDate = string
 // ---------- Users & auth ----------
 
 export interface User {
+  /** Firebase Auth UID. Supplied by the backend from verified identity. */
   id: string
   fullName: string
   firstName: string
@@ -24,7 +27,7 @@ export interface User {
 
 export interface Session {
   user: User
-  /** Bearer token for API calls (planned: Firebase ID token). Null for the mock and demo sessions. */
+  /** Firebase ID token for the authenticated session. */
   token: string | null
 }
 
@@ -143,10 +146,12 @@ export interface TransactionFilters {
 }
 
 export interface TransactionInput {
+  // Ownership comes from the verified bearer token, never from this input.
   date: IsoDate
   description: string
   categoryId: CategoryId
   type: TransactionType
+  /** Nonzero safe integer cents: negative expense, positive income. */
   amountCents: number
 }
 
@@ -233,7 +238,7 @@ export interface CalendarSummary {
     label: string
     date: IsoDate
     amountCents: number
-  }
+  } | null
 }
 
 export interface CalendarMonth {

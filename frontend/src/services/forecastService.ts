@@ -1,24 +1,6 @@
-import { mockForecastSeries, mockForecastSummary, mockMonthlyBreakdown, mockTermCategoryBreakdown } from '../data/mockData'
+import { apiClient } from '../lib/apiClient'
 import type { CategoryBreakdown, ForecastGranularity, ForecastSeries, ForecastSummary, MonthlyBreakdown } from '../types'
-import { mockResponse } from './mock'
-
-// BACKEND: GET /api/forecast/summary
-export function getForecastSummary(): Promise<ForecastSummary> {
-  return mockResponse(mockForecastSummary)
-}
-
-// BACKEND: GET /api/forecast/series?granularity={weekly|monthly|semester}
-// The mock returns the same series for every granularity.
-export function getForecastSeries(granularity: ForecastGranularity): Promise<ForecastSeries> {
-  return mockResponse({ ...mockForecastSeries, granularity })
-}
-
-// BACKEND: GET /api/forecast/categories
-export function getForecastCategoryBreakdown(): Promise<CategoryBreakdown> {
-  return mockResponse(mockTermCategoryBreakdown)
-}
-
-// BACKEND: GET /api/forecast/monthly?months=4
-export function getMonthlyBreakdown(): Promise<MonthlyBreakdown> {
-  return mockResponse(mockMonthlyBreakdown)
-}
+export const getForecastSummary = () => apiClient.get<ForecastSummary>('/forecast/summary')
+export const getForecastSeries = (granularity: ForecastGranularity) => apiClient.get<ForecastSeries>(`/forecast/series?granularity=${granularity}`)
+export const getForecastCategoryBreakdown = () => apiClient.get<CategoryBreakdown>('/forecast/categories')
+export const getMonthlyBreakdown = () => apiClient.get<MonthlyBreakdown>('/forecast/monthly')
