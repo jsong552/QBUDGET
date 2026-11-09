@@ -1,6 +1,7 @@
 import { CalendarDays, ChartNoAxesColumnIncreasing, LockKeyhole, Mail, Target, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
-import { Navigate, useNavigate } from 'react-router'
+import { Navigate } from 'react-router'
+import { authErrorMessage } from '../services/authService'
 import { Button } from '../components/Button'
 import { LoginIllustration } from '../components/LoginIllustration'
 import { Logo } from '../components/Logo'
@@ -46,35 +47,37 @@ function ModeTab({ tab, selected, onSelect }: { tab: (typeof modeTabs)[number]; 
 }
 
 export function LoginPage() {
-  const { session, demoEnabled, signIn, signUp, continueAsDemo } = useAuth()
-  const navigate = useNavigate()
+  const { session, loading, error: sessionError, signIn, signUp } = useAuth()
   const [mode, setMode] = useState<AuthMode>('signIn')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (loading) return <p role="status" className="p-8 text-muted">Restoring your session…</p>
   if (session) return <Navigate to="/" replace />
 
   function onModeChange(nextMode: AuthMode) {
+    if (busy) return
     setMode(nextMode)
+    setError(null)
   }
 
   async function onSubmitCredentials() {
-    const request = { email, password }
-    try {
-      await (mode === 'signIn' ? signIn(request) : signUp(request))
-      navigate('/', { replace: true })
-    } catch (failure) {
-      console.error('[auth] sign-in failed', failure)
+    if (busy) return
+    setError(null)
+    if (!email.trim() || !password) {
+      setError('Enter your email address and password.')
+      return
     }
-  }
-
-  async function onContinueToDemo() {
+    setBusy(true)
     try {
-      await continueAsDemo()
-      navigate('/', { replace: true })
+      await (mode === 'signIn' ? signIn({ email, password }) : signUp({ email, password }))
+      // The Firebase observer sets the session; Navigate above handles success.
     } catch (failure) {
-      console.error('[auth] demo sign-in failed', failure)
-    }
+      setError(authErrorMessage(failure))
+    } finally { setBusy(false) }
   }
 
   return (
@@ -121,27 +124,30 @@ export function LoginPage() {
             ))}
           </div>
 
+          <form onSubmit={(event) => { event.preventDefault(); void onSubmitCredentials() }}>
           <div className="mt-8 space-y-6">
-            <TextField label="Email address" type="email" placeholder="Enter your email address" icon={Mail} value={email} onValueChange={setEmail} />
+            <TextField label="Email address" type="email" placeholder="Enter your email address" icon={Mail} value={email} onValueChange={setEmail} disabled={busy} required autoComplete="email" />
             <TextField
               label="Password"
               type="password"
               placeholder="Enter your password"
               icon={LockKeyhole}
+              disabled={busy}
+              required
+              autoComplete={mode === 'signUp' ? 'new-password' : 'current-password'}
               value={password}
               onValueChange={setPassword}
             />
           </div>
 
-          <Button onClick={onSubmitCredentials} fullWidth className="mt-9 h-14 text-base font-medium">
-            {mode === 'signIn' ? 'Sign in' : 'Sign up'}
+          {(error || sessionError) && <p role="alert" className="mt-4 text-sm text-danger">{error || sessionError}</p>}
+          <Button type="submit" disabled={busy} fullWidth className="mt-9 h-14 text-base font-medium">
+            {busy ? 'Please wait…' : mode === 'signIn' ? 'Sign in' : 'Sign up'}
           </Button>
 
-          {demoEnabled && (
-            <Button variant="outline" onClick={onContinueToDemo} fullWidth className="mt-3 h-12 text-base font-medium">
-              Continue to demo
-            </Button>
-          )}
+          </form>
+
+
         </div>
       </main>
     </div>

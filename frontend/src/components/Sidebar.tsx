@@ -11,6 +11,9 @@ interface NavItem {
 const mainNav: NavItem[] = [
   { to: '/', label: 'Home', icon: House },
   { to: '/expenses', label: 'Expenses', icon: CreditCard },
+  { to: '/budgets', label: 'Budgets', icon: CreditCard },
+  { to: '/recurring', label: 'Recurring', icon: CalendarDays },
+  { to: '/semester', label: 'Semester', icon: BarChart3 },
   { to: '/forecast', label: 'Forecast', icon: BarChart3 },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
 ]

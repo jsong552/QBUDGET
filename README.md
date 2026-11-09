@@ -1,7 +1,10 @@
 # QBUDGET
 
 React + TypeScript + Tailwind frontend, with a separate C++ HTTP API.
-Firebase authentication and database are not configured yet.
+Firebase email/password authentication is implemented; add your web app settings in
+`frontend/.env` using [the Firebase setup guide](docs/firebase-setup.md).
+Firestore persistence and C++ authentication are implemented. Follow
+[Firestore setup](docs/firestore-setup.md) to create the database and publish its rules.
 
 ## Team quick start (Windows, macOS, Linux)
 
@@ -22,8 +25,8 @@ Linux containers. The API is still compiled and run as C++.
    Use your own local folder; there are no machine-specific project paths.
 4. Open a terminal in the **QBUDGET root**, where `compose.yaml` lives.
 
-You need an internet connection for image/package downloads. No Firebase
-account or `.env` file is required for the current hello-world example.
+You need an internet connection for image/package downloads. Copy `frontend/.env.example` to `frontend/.env` if needed and fill in the Firebase
+settings before signing in. The public health/hello endpoints do not need Firebase.
 
 ### 2. Start the app
 
@@ -154,7 +157,7 @@ On Linux/macOS you can also compile directly:
 
 ```sh
 mkdir -p build
-g++ -std=c++17 -O2 -pthread -I vendor src/main.cpp -o build/qbudget-api
+g++ -std=c++17 -O2 -pthread -I vendor src/main.cpp -o build/qbudget-api -lcurl
 ./build/qbudget-api
 ```
 
@@ -191,20 +194,11 @@ docker build -t qbudget-api .
 docker run --rm -p 8080:8080 qbudget-api
 ```
 
-## Firebase later
+## Firebase and Firestore
 
-A suitable flow is React -> C++ API -> database. React can use the Firebase
-browser SDK to sign in, then send its ID token as `Authorization: Bearer ...`.
-Before adding protected budget endpoints, implement server-side token verification
-and ownership checks in C++. Firebase documents third-party JWT verification for
-languages without a Firebase Admin SDK. Do not assume the Firebase C++ client SDK
-is a server Admin SDK. Database integration is a separate step (for example,
-Firestore's REST API). Never put service-account private keys in the frontend or
-in VITE_ environment variables, which are public in the compiled browser bundle.
+See [Firebase login setup](docs/firebase-setup.md) and
+[Firestore setup, restart instructions, and current limits](docs/firestore-setup.md).
 
-References:
-- https://docs.docker.com/compose/install/
-- https://docs.docker.com/reference/cli/docker/compose/up/
-- https://vercel.com/docs/functions/runtimes
-- https://docs.railway.com/builds/dockerfiles
-- https://firebase.google.com/docs/auth/admin/verify-id-tokens
+The browser sends a Firebase ID token to the C++ API. C++ validates it with
+Firebase and uses Firestore REST with account-scoped paths and ownership rules.
+No service-account private key is required. Production data no longer uses mocks.

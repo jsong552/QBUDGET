@@ -1,3 +1,6 @@
+import { RecordForm } from '../components/RecordForm'
+import { amountToCents } from '../lib/moneyInput'
+import { DataError } from '../components/DataError'
 import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronsUpDown, CirclePlus, Pencil, Search, Trash2, Wallet } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Button } from '../components/Button'
@@ -39,18 +42,11 @@ const typeOptions: SelectOption<TransactionTypeFilter>[] = [
 
 const periodOptions: SelectOption<TransactionPeriodFilter>[] = [
   { value: 'all_time', label: 'All time' },
+  { value: 'this_week', label: 'This week' },
   { value: 'this_month', label: 'This month' },
   { value: 'last_month', label: 'Last month' },
   { value: 'this_term', label: 'This term' },
 ]
-
-const newExpenseDraft: TransactionInput = {
-  date: '',
-  description: '',
-  categoryId: 'other',
-  type: 'expense',
-  amountCents: 0,
-}
 
 interface Column {
   key: TransactionSortKey | 'actions'
@@ -68,23 +64,13 @@ const columns: Column[] = [
   { key: 'actions', label: 'Actions', sort: null, className: '' },
 ]
 
-function toTransactionInput(transaction: Transaction): TransactionInput {
-  return {
-    date: transaction.date,
-    description: transaction.description,
-    categoryId: transaction.category.id,
-    type: transaction.type,
-    amountCents: transaction.amountCents,
-  }
-}
-
 function categoryOptions(categories: Category[]): SelectOption<CategoryId | 'all'>[] {
   return [{ value: 'all', label: 'All categories' }, ...categories.map((category) => ({ value: category.id, label: category.name }))]
 }
 
 interface TransactionRowProps {
   transaction: Transaction
-  onEditTransaction: (transaction: Transaction) => Promise<boolean>
+  onEditTransaction: (transaction: Transaction) => void
   onDeleteTransaction: (transaction: Transaction) => Promise<boolean>
 }
 
@@ -157,7 +143,10 @@ export function ExpensesPage() {
   const [filterChoices, setFilters] = useState(defaultFilters)
   const search = useDebouncedValue(searchText, searchDebounceMs)
   const filters = useMemo<TransactionFilters>(() => ({ ...filterChoices, search }), [filterChoices, search])
-  const { summary, transactions, categories, addTransaction, editTransaction, deleteTransaction } = useTransactions(filters)
+  const [editing, setEditing] = useState<Transaction | null | undefined>(undefined)
+  const { summary, transactions, categories, error, addTransaction, editTransaction, deleteTransaction } = useTransactions(filters)
+  const editableCategories = editing && !categories?.some((c) => c.id === editing.category.id)
+    ? [...(categories ?? []), editing.category] : (categories ?? [])
 
   function onSearchChange(text: string) {
     setSearchText(text)
@@ -184,21 +173,33 @@ export function ExpensesPage() {
   }
 
   function onAddExpense() {
-    return addTransaction(newExpenseDraft)
+    setEditing(null)
   }
 
   function onEditTransaction(transaction: Transaction) {
-    return editTransaction(transaction.id, toTransactionInput(transaction))
+    setEditing(transaction)
   }
 
   function onDeleteTransaction(transaction: Transaction) {
-    return deleteTransaction(transaction.id)
+    return window.confirm(`Delete ${transaction.description}?`) ? deleteTransaction(transaction.id) : Promise.resolve(false)
   }
 
   return (
     <div>
+      <DataError error={error} />
       <PageHeader title="Expenses" subtitle="View, add and manage your income and expenses." />
 
+      {editing !== undefined && <RecordForm title={editing ? 'Edit transaction' : 'Add transaction'} initial={{
+        date: editing?.date ?? new Date().toISOString().slice(0, 10), description: editing?.description ?? '', note: editing?.note ?? '', categoryId: editing?.category.id ?? 'other', type: editing?.type ?? 'expense', amount: editing ? (Math.abs(editing.amountCents) / 100).toFixed(2) : '',
+      }} fields={[
+        { name: 'date', label: 'Date', type: 'date' }, { name: 'description', label: 'Description / income source' }, { name: 'note', label: 'Note (optional)', required: false },
+        { name: 'type', label: 'Type', options: [{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }] },
+        { name: 'categoryId', label: 'Category', options: editableCategories.map((c) => ({ value: c.id, label: c.name })) },
+        { name: 'amount', label: 'Amount (CAD)', type: 'number' },
+      ]} onClose={() => setEditing(undefined)} onSave={(values) => {
+        const input: TransactionInput = { date: values.date, description: values.description, note: values.note, categoryId: values.categoryId, type: values.type as 'income' | 'expense', amountCents: amountToCents(values.amount) * (values.type === 'expense' ? -1 : 1) }
+        return editing ? editTransaction(editing.id, input) : addTransaction(input)
+      }} />}
       {summary && (
         <div className="mt-6 grid grid-cols-3 gap-5">
           <StatCard
@@ -240,7 +241,7 @@ export function ExpensesPage() {
             subtitle="View and manage all of your income and expenses."
             action={
               <Button icon={CirclePlus} onClick={onAddExpense} className="px-5 py-3 text-[15px]">
-                Add expense
+                Add transaction
               </Button>
             }
           />
@@ -279,6 +280,7 @@ export function ExpensesPage() {
             </tr>
           </thead>
           <tbody>
+            {transactions?.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-muted">No transactions yet. Add income or an expense to get started.</td></tr>}
             {transactions?.map((transaction) => (
               <TransactionRow
                 key={transaction.id}

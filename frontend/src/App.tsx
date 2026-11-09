@@ -1,3 +1,6 @@
+import { BudgetsPage } from './pages/BudgetsPage'
+import { SemesterPage } from './pages/SemesterPage'
+import { RecurringPage } from './pages/RecurringPage'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { AppLayout } from './components/AppLayout'
 import { RequireAuth } from './components/RequireAuth'
@@ -25,6 +28,9 @@ function App() {
             }
           >
             <Route index element={<HomePage />} />
+            <Route path="budgets" element={<BudgetsPage />} />
+            <Route path="semester" element={<SemesterPage />} />
+            <Route path="recurring" element={<RecurringPage />} />
             <Route path="expenses" element={<ExpensesPage />} />
             <Route path="forecast" element={<ForecastPage />} />
             <Route path="calendar" element={<CalendarPage />} />

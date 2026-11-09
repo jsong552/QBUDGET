@@ -1,3 +1,4 @@
+import { DataError } from '../components/DataError'
 import {
   BarChart3,
   CalendarDays,
@@ -44,7 +45,7 @@ const themeOptions: { value: ThemePreference; label: string; icon: LucideIcon }[
 
 const currencyOptions: SelectOption<CurrencyCode>[] = [
   { value: 'CAD', label: 'Canadian Dollar (CAD)' },
-  { value: 'USD', label: 'US Dollar (USD)' },
+
 ]
 
 const weekStartOptions: SelectOption<WeekStart>[] = [
@@ -104,6 +105,8 @@ function AccountCard({ profile, onSaveProfile, onChangeAvatar }: AccountCardProp
           <div className="grid size-24 place-items-center rounded-full bg-accent-soft text-[28px] font-bold text-ink">{profile.initials}</div>
           <button
             type="button"
+            disabled
+            title="Avatar uploads are not available yet"
             aria-label="Change profile photo"
             onClick={onChangeAvatar}
             className="absolute -right-1 bottom-0 grid size-8 place-items-center rounded-full border-2 border-surface bg-primary text-on-primary"
@@ -227,7 +230,7 @@ function NotificationRow({ preference, onToggle }: { preference: NotificationPre
         <p className="text-[15px] font-semibold text-ink">{preference.title}</p>
         <p className="text-[13px] text-muted">{preference.description}</p>
       </div>
-      <Toggle checked={preference.enabled} label={preference.title} onChange={onToggleChange} />
+      <Toggle disabled={preference.key !== 'payment_reminders'} checked={preference.enabled} label={preference.title} onChange={onToggleChange} />
     </li>
   )
 }
@@ -256,7 +259,7 @@ function ManagementRow({ icon, tone, title, description, action }: ManagementRow
 export function SettingsPage() {
   const { signOut } = useAuth()
   const profile = useCurrentUser()
-  const { display, notifications, saveProfile, changeAvatar, changeDisplay, toggleNotification, changePassword, removeAccount } = useSettings()
+  const { error, display, notifications, saveProfile, changeAvatar, changeDisplay, toggleNotification, changePassword, removeAccount } = useSettings()
 
   function onDisplayChange(changes: Partial<DisplayPreferences>) {
     return changeDisplay(changes)
@@ -267,7 +270,7 @@ export function SettingsPage() {
   }
 
   function onChangePassword() {
-    return changePassword()
+    void changePassword().then((ok) => { if (ok) window.alert('Password reset email sent. Check your inbox.') })
   }
 
   function onDeleteAccount() {
@@ -280,6 +283,7 @@ export function SettingsPage() {
 
   return (
     <div>
+      <DataError error={error} />
       <PageHeader title="Settings" subtitle="Manage your account, preferences, and notifications." />
 
       <div className="mt-6 grid grid-cols-2 gap-4">
@@ -312,10 +316,10 @@ export function SettingsPage() {
             <ManagementRow
               icon={Trash2}
               tone="danger"
-              title="Delete account"
+              title="Delete account (not available yet)"
               description="Permanently delete your account and all data."
               action={
-                <Button variant="danger" onClick={onDeleteAccount}>
+                <Button variant="danger" disabled onClick={onDeleteAccount}>
                   Delete account
                 </Button>
               }

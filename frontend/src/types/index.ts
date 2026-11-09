@@ -1,5 +1,7 @@
 /**
  * Shared data types. These describe the shapes the API is expected to return.
+ * Core C++ counterparts: backend/src/models.hpp. Storage and ownership rules:
+ * docs/data-model.md. Keep both definitions aligned when changing the API.
  *
  * Conventions:
  * - All money values are integer cents (`...Cents`). Expenses are negative where a value is signed.
@@ -14,6 +16,7 @@ export type IsoDate = string
 // ---------- Users & auth ----------
 
 export interface User {
+  /** Firebase Auth UID. Supplied by the backend from verified identity. */
   id: string
   fullName: string
   firstName: string
@@ -24,7 +27,7 @@ export interface User {
 
 export interface Session {
   user: User
-  /** Bearer token for API calls (planned: Firebase ID token). Null for the mock and demo sessions. */
+  /** Firebase ID token for the authenticated session. */
   token: string | null
 }
 
@@ -48,6 +51,8 @@ export type CategoryId =
   | (string & {})
 
 export interface Category {
+  custom?: boolean
+  archived?: boolean
   id: CategoryId
   name: string
 }
@@ -106,6 +111,7 @@ export interface SpendingActivity {
 export type TransactionType = 'income' | 'expense'
 
 export interface Transaction {
+  note?: string
   id: string
   date: IsoDate
   description: string
@@ -130,7 +136,7 @@ export interface TransactionSummary {
 }
 
 export type TransactionTypeFilter = 'all' | TransactionType
-export type TransactionPeriodFilter = 'all_time' | 'this_month' | 'last_month' | 'this_term'
+export type TransactionPeriodFilter = 'this_week' | 'all_time' | 'this_month' | 'last_month' | 'this_term'
 export type TransactionSortKey = 'date' | 'description' | 'category' | 'type' | 'amount'
 
 export interface TransactionFilters {
@@ -143,10 +149,13 @@ export interface TransactionFilters {
 }
 
 export interface TransactionInput {
+  note?: string
+  // Ownership comes from the verified bearer token, never from this input.
   date: IsoDate
   description: string
   categoryId: CategoryId
   type: TransactionType
+  /** Nonzero safe integer cents: negative expense, positive income. */
   amountCents: number
 }
 
@@ -209,6 +218,7 @@ export interface BudgetGoalInput {
 export type EventKind = 'rent' | 'credit_card' | 'tuition' | 'utilities' | 'textbook' | (string & {})
 
 export interface CalendarEvent {
+  paid?: boolean
   id: string
   title: string
   /** Shorter label used inside calendar cells. */
@@ -233,7 +243,7 @@ export interface CalendarSummary {
     label: string
     date: IsoDate
     amountCents: number
-  }
+  } | null
 }
 
 export interface CalendarMonth {
@@ -246,6 +256,7 @@ export interface CalendarMonth {
 export type CalendarView = 'month' | 'week'
 
 export interface CalendarEventInput {
+  paid?: boolean
   title: string
   kind: EventKind
   date: IsoDate

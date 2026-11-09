@@ -1,35 +1,16 @@
-import { mockCategories, mockTransactionSummary, mockTransactions } from '../data/mockData'
+import { apiClient } from '../lib/apiClient'
 import type { Category, Transaction, TransactionFilters, TransactionInput, TransactionSummary } from '../types'
-import { mockMutation, mockResponse } from './mock'
-
-// BACKEND: GET /api/transactions/summary
-export function getTransactionSummary(): Promise<TransactionSummary> {
-  return mockResponse(mockTransactionSummary)
+export const getTransactionSummary = () => apiClient.get<TransactionSummary>('/transactions/summary')
+export function listTransactions(filters: TransactionFilters) {
+  const params = new URLSearchParams({ search: filters.search, type: filters.type, category: filters.categoryId, period: filters.period, sort: filters.sortBy, direction: filters.sortDirection })
+  return apiClient.get<Transaction[]>(`/transactions?${params}`)
 }
+export const listCategories = () => apiClient.get<Category[]>('/categories')
+export const createTransaction = (input: TransactionInput) => apiClient.post<void>('/transactions', input)
+export const updateTransaction = (id: string, input: TransactionInput) => apiClient.put<void>(`/transactions/${encodeURIComponent(id)}`, input)
+export const removeTransaction = (id: string) => apiClient.delete<void>(`/transactions/${encodeURIComponent(id)}`)
 
-// BACKEND: GET /api/transactions?search=&type=&category=&period=&sort=&direction=
-// Filtering and sorting happen on the server; the mock always returns the full list.
-export function listTransactions(filters: TransactionFilters): Promise<Transaction[]> {
-  console.info('[mock] listTransactions', filters)
-  return mockResponse(mockTransactions)
-}
-
-// BACKEND: GET /api/categories
-export function listCategories(): Promise<Category[]> {
-  return mockResponse(mockCategories)
-}
-
-// BACKEND: POST /api/transactions
-export function createTransaction(input: TransactionInput): Promise<void> {
-  return mockMutation('createTransaction', input)
-}
-
-// BACKEND: PUT /api/transactions/{id}
-export function updateTransaction(id: string, input: TransactionInput): Promise<void> {
-  return mockMutation('updateTransaction', { id, ...input })
-}
-
-// BACKEND: DELETE /api/transactions/{id}
-export function removeTransaction(id: string): Promise<void> {
-  return mockMutation('removeTransaction', { id })
+export function getTransactionView(filters: TransactionFilters) {
+  const params = new URLSearchParams({ search: filters.search, type: filters.type, category: filters.categoryId, period: filters.period, sort: filters.sortBy, direction: filters.sortDirection })
+  return apiClient.get<{ transactions: Transaction[]; summary: TransactionSummary; categories: Category[] }>(`/transactions/view?${params}`)
 }

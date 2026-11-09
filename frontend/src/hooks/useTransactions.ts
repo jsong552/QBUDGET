@@ -1,9 +1,7 @@
 import { useCallback } from 'react'
 import {
   createTransaction,
-  getTransactionSummary,
-  listCategories,
-  listTransactions,
+  getTransactionView,
   removeTransaction,
   updateTransaction,
 } from '../services/transactionService'
@@ -12,21 +10,10 @@ import { useAsync } from './useAsync'
 import { useMutation } from './useMutation'
 
 export function useTransactions(filters: TransactionFilters) {
-  const loadTransactions = useCallback(() => listTransactions(filters), [filters])
-
-  const summary = useAsync(getTransactionSummary)
-  const transactions = useAsync(loadTransactions)
-  const categories = useAsync(listCategories)
+  const loadView = useCallback(() => getTransactionView(filters), [filters])
+  const view = useAsync(loadView)
   const { run, error: mutationError } = useMutation()
-
-  const reloadSummary = summary.reload
-  const reloadTransactions = transactions.reload
-
-  /** A transaction change affects the list and the summary cards. */
-  const reloadAfterChange = useCallback(() => {
-    reloadTransactions()
-    reloadSummary()
-  }, [reloadTransactions, reloadSummary])
+  const reloadAfterChange = view.reload
 
   const addTransaction = useCallback(
     (input: TransactionInput) => run(() => createTransaction(input), { onSuccess: reloadAfterChange }),
@@ -44,10 +31,10 @@ export function useTransactions(filters: TransactionFilters) {
   )
 
   return {
-    summary: summary.data,
-    transactions: transactions.data,
-    categories: categories.data,
-    error: summary.error ?? transactions.error ?? categories.error ?? mutationError,
+    summary: view.data?.summary,
+    transactions: view.data?.transactions,
+    categories: view.data?.categories,
+    error: view.error ?? mutationError,
     addTransaction,
     editTransaction,
     deleteTransaction,
