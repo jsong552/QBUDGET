@@ -165,8 +165,8 @@ function UpcomingEventRow({ upcoming }: { upcoming: UpcomingEvent }) {
 export function CalendarPage() {
   const [requestedMonth, setRequestedMonth] = useState<IsoDate | null>(null)
   const [view, setView] = useState<CalendarView>('month')
-  const [adding, setAdding] = useState(false)
-  const { summary, calendarMonth, upcoming, reminders, error, addEvent, changeReminders } = useCalendar(requestedMonth, view)
+  const [editing, setEditing] = useState<CalendarEvent | null | undefined>()
+  const { summary, calendarMonth, upcoming, reminders, error, addEvent, editEvent, deleteEvent, changeReminders } = useCalendar(requestedMonth, view)
 
   function onPreviousMonth() {
     if (calendarMonth) setRequestedMonth(shiftMonth(calendarMonth.month, -1))
@@ -181,7 +181,7 @@ export function CalendarPage() {
   }
 
   function onCreateEvent() {
-    setAdding(true)
+    setEditing(null)
   }
 
   function onViewAllEvents() {
@@ -199,9 +199,11 @@ export function CalendarPage() {
   return (
     <div>
       <DataError error={error} />
-      {adding && <RecordForm title="Schedule a payment" initial={{ title: '', date: new Date().toISOString().slice(0, 10), kind: 'rent', amount: '' }} fields={[
+      {editing !== undefined && <RecordForm title={editing ? 'Edit scheduled payment' : 'Schedule a payment'} initial={{ title: editing?.title ?? '', date: editing?.date ?? new Date().toISOString().slice(0, 10), kind: editing?.kind ?? 'rent', amount: editing ? (editing.amountCents / 100).toFixed(2) : '', reminder: editing?.hasReminder === false ? 'false' : 'true', paid: editing?.paid ? 'true' : 'false' }} fields={[
         { name: 'title', label: 'Title' }, { name: 'date', label: 'Due date', type: 'date' }, { name: 'kind', label: 'Kind', options: ['rent', 'credit_card', 'tuition', 'utilities', 'textbook', 'other'].map((value) => ({ value, label: value.replace('_', ' ') })) }, { name: 'amount', label: 'Amount (CAD)', type: 'number' },
-      ]} onClose={() => setAdding(false)} onSave={(v) => addEvent({ title: v.title, date: v.date, kind: v.kind, amountCents: amountToCents(v.amount), hasReminder: true })} />}
+        { name: 'reminder', label: 'In-app reminder', options: [{ value: 'true', label: 'Enabled' }, { value: 'false', label: 'Disabled' }] },
+        { name: 'paid', label: 'Payment status', options: [{ value: 'false', label: 'Unpaid' }, { value: 'true', label: 'Paid (record actual expense separately)' }] },
+      ]} onClose={() => setEditing(undefined)} onDelete={editing ? () => deleteEvent(editing.id) : undefined} onSave={v => { const input = { title: v.title, date: v.date, kind: v.kind, amountCents: amountToCents(v.amount), hasReminder: v.reminder === 'true', paid: v.paid === 'true' }; return editing ? editEvent(editing.id, input) : addEvent(input) }} />}
       <PageHeader
         title="Calendar"
         subtitle="Keep track of your upcoming payments and important financial dates."
@@ -233,6 +235,7 @@ export function CalendarPage() {
         </div>
       )}
 
+      <Card className="mt-5 p-5"><h2 className="text-lg font-bold">Payments in the selected month</h2><ul>{calendarMonth?.events.map(event => <li key={event.id} className="flex items-center justify-between border-b border-line py-2"><span>{event.title} - {event.date} - {formatMoney(event.amountCents)} {event.paid ? '(paid)' : ''}</span><Button variant="outline" onClick={() => setEditing(event)}>Edit</Button></li>)}</ul></Card>
       <div className="mt-5 grid grid-cols-[2fr_1fr] gap-5">
         <Card className="px-0 pt-5 pb-0">
           {calendarMonth && (

@@ -10,3 +10,6 @@ export const listUpcomingEvents = () => apiClient.get<UpcomingEvent[]>('/calenda
 export const createEvent = (input: CalendarEventInput) => apiClient.post<void>('/calendar/events', input)
 export const getReminderSettings = () => apiClient.get<ReminderSettings>('/calendar/reminders')
 export const updateReminderSettings = (settings: ReminderSettings) => apiClient.put<void>('/calendar/reminders', settings)
+
+export const updateEvent = (id: string, input: CalendarEventInput) => apiClient.put<void>(`/calendar/events/${encodeURIComponent(id)}`, input)
+export const removeEvent = (id: string) => apiClient.delete<void>(`/calendar/events/${encodeURIComponent(id)}`)

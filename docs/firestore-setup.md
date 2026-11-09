@@ -26,7 +26,7 @@ requests. Do not disable Firestore rules to work around an error.
 
 ## Restarting during development
 
-| Changed | What to do |
+| Changed | What to do | 
 | --- | --- |
 | React, TypeScript, CSS | Save; Vite reloads automatically. No restart. |
 | C++ source or headers | Ctrl+C, then run the startup script again to rebuild. |
@@ -36,44 +36,30 @@ requests. Do not disable Firestore rules to work around an error.
 
 ## Architecture and storage
 
-React signs in with Firebase Auth and sends an ID token to the C++ API. C++ asks
-Firebase's `accounts:lookup` endpoint to validate the token and obtain the UID.
-It does not trust a UID sent by the browser or decode a JWT without verification.
-C++ calls Firestore REST with that same user token; Firestore checks the rules.
-All document paths are constructed under `users/{verifiedUid}`.
+React sends a Firebase ID token to the C++ API. AuthService validates it through
+Firebase accounts:lookup. FirestoreClient constructs paths under users/{verifiedUid}
+and calls Firestore REST with that user's token. Published rules enforce ownership.
+No service-account private key is required. JSON request ownership fields are rejected.
 
-- `users/{uid}`: profile fields saved from Settings. Until the first save,
-  the profile response derives its name from Firebase Auth.
-- `users/{uid}/transactions/{id}`: income and expenses.
-- `users/{uid}/goals/{id}`: savings goals and monthly spending limits.
-- `users/{uid}/events/{id}`: scheduled payments.
-- `users/{uid}/settings/{display|reminders|notifications}`: preferences.
+**After this refactor, republish the current root firestore.rules**, even if you
+published the old version already. New categories, budgets, recurring, bursaries,
+fees and semester-settings collections need these rules. Transaction notes and
+recurrence markers and event paid state are also supported. The code has not
+published rules or changed your live Firebase project automatically.
 
-Categories are a fixed C++ catalogue. No sample transactions or demo sessions
-are used. The rules permit users to access only their own documents, even if
-someone calls Firestore directly. C++ validates incoming and stored financial
-records. Amounts are CAD integer cents, capped at 100 billion cents per record;
-this demo implementation loads at most 10,000 records per collection.
+New accounts start empty with built-in categories. Old records remain readable;
+new optional fields have defaults and historical category IDs are retained.
+Budgets, balances and forecasts are calculated in C++, not stored as duplicated totals.
 
-## Calculation conventions and current limits
+Dashboard, transaction and forecast views have bundled endpoints. Token validation
+still occurs on every request, and collection reads are limited to 10,000 records
+per collection. There is no claim of one-second deployed response time.
 
-- Balances include recorded transactions dated today or earlier.
-- Dashboard spending is this calendar month. The monthly budget is the sum of
-  spending-limit goals, or this month's income if no spending limits exist.
-- Savings goal progress uses the overall positive balance; it does not allocate
-  separate savings pots. Spending-limit progress uses this month's expenses.
-- Terms are January-April, May-August, September-December. Server dates use UTC.
-- Forecasts use scheduled payments from today through the end of the fourth
-  calendar month, assume no future income, and are explicitly labelled.
-  Scheduling a payment does not mark it paid or create a transaction. Remove
-  or adjust the scheduled event through the API if it has already been paid.
-- Notification messages are generated from upcoming events and saved reminder
-  preferences. Email delivery, avatars, account deletion, and nonpayment
-  notification generation are unavailable; their corresponding controls are
-  disabled or labelled. Display preferences are saved; the existing UI does
-  not yet apply all theme/date/week-start options globally.
-- Each API call validates with Firebase and reads Firestore. No caching or
-  batch dashboard endpoint yet; expect multiple reads per page.
+Recurring processing runs on application startup, schedule save and explicit sync;
+there is no background job. Calendar payments can be edited, deleted or marked paid.
+They do not automatically create actual transactions. Email delivery, account deletion,
+avatars, some display options, official tuition lookup, rent maps and discounts remain
+incomplete. The requirements status file records these limits explicitly.
 
 ## Deployment and native builds
 
@@ -94,8 +80,7 @@ Frontend: `cd frontend`, then `npm test`, `npm run build`, `npm run lint`.
 Backend on Windows (from the root, with g++ installed):
 
 ```powershell
-g++ -std=c++17 -I backend/vendor backend/tests/data_test.cpp -o backend/build/data-tests.exe -lws2_32 -lwinhttp
-.\backend\build\data-tests.exe
+.\backend\test.ps1
 ```
 
 The backend tests use an injected HTTP transport to check authentication failures,

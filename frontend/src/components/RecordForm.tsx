@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 
 import { Button } from './Button'
 
-
-
 export interface RecordField {
 
   name: string
 
   label: string
 
+  required?: boolean
+  min?: string
+  step?: string
   type?: 'text' | 'date' | 'number'
 
   options?: { value: string; label: string }[]
@@ -62,7 +63,7 @@ export function RecordForm({ title, fields, initial, onSave, onClose, onDelete }
 
           {field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
 
-        </select> : <input required disabled={busy} type={field.type ?? 'text'} step={field.type === 'number' ? '0.01' : undefined} min={field.type === 'number' ? '0.01' : undefined} maxLength={200} className="mt-1 block w-full rounded border border-line p-2" value={values[field.name] ?? ''} onChange={(e) => setValues({ ...values, [field.name]: e.target.value })} />}
+        </select> : <input required={field.required !== false} disabled={busy} type={field.type ?? 'text'} step={field.step ?? (field.type === 'number' ? '0.01' : undefined)} min={field.min ?? (field.type === 'number' ? '0.01' : undefined)} maxLength={200} className="mt-1 block w-full rounded border border-line p-2" value={values[field.name] ?? ''} onChange={(e) => setValues({ ...values, [field.name]: e.target.value })} />}
 
       </label>)}
 
@@ -71,7 +72,7 @@ export function RecordForm({ title, fields, initial, onSave, onClose, onDelete }
       <div className="flex justify-end gap-3">{onDelete && <Button variant="danger" disabled={busy} onClick={() => {
         if (!window.confirm('Delete this record?')) return
         setBusy(true)
-        void onDelete().then((ok) => { if (ok) onClose(); else setError('Could not delete. Try again.') }).finally(() => setBusy(false))
+        void onDelete().then((ok) => { if (ok) onClose(); else setError('Could not delete. Try again.') }).catch((failure: unknown) => setError(failure instanceof Error ? failure.message : 'Could not delete.')).finally(() => setBusy(false))
       }}>Delete</Button>}<Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></div>
 
     </form>

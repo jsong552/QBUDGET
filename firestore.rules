@@ -5,6 +5,10 @@ service cloud.firestore {
     function text(value, limit) { return value is string && value.size() > 0 && value.size() <= limit; }
     function cents(value) { return value is int && value >= -100000000000 && value <= 100000000000; }
     function date(value) { return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'); }
+    function category(uid, id) {
+      return id is string && (id in ['groceries','rent','tuition','personal_hygiene','hobbies','other','income','food','dining','housing','school','transportation','utilities']
+        || exists(/databases/$(database)/documents/users/$(uid)/categories/$(id)));
+    }
     match /users/{uid} {
       allow read, delete: if owner(uid);
       allow create, update: if owner(uid)
@@ -14,9 +18,11 @@ service cloud.firestore {
       match /transactions/{id} {
         allow read, delete: if owner(uid);
         allow create, update: if owner(uid)
-          && request.resource.data.keys().hasOnly(['date','description','categoryId','type','amountCents'])
+          && request.resource.data.keys().hasOnly(['date','description','categoryId','type','amountCents','note','recurrenceId','voided'])
           && date(request.resource.data.date) && text(request.resource.data.description, 200)
-          && request.resource.data.categoryId in ['groceries','food','dining','housing','school','transportation','utilities','income','other']
+          && category(uid, request.resource.data.categoryId)
+          && request.resource.data.get('note','') is string && request.resource.data.get('note','').size() <= 1000
+          && request.resource.data.get('recurrenceId','') is string && request.resource.data.get('voided',false) is bool
           && cents(request.resource.data.amountCents)
           && ((request.resource.data.type == 'expense' && request.resource.data.amountCents < 0)
             || (request.resource.data.type == 'income' && request.resource.data.amountCents > 0));
@@ -32,15 +38,65 @@ service cloud.firestore {
       match /events/{id} {
         allow read, delete: if owner(uid);
         allow create, update: if owner(uid)
-          && request.resource.data.keys().hasOnly(['date','title','kind','amountCents','hasReminder'])
+          && request.resource.data.keys().hasOnly(['date','title','kind','amountCents','hasReminder','paid'])
           && date(request.resource.data.date) && text(request.resource.data.title, 200)
-          && text(request.resource.data.kind, 40) && request.resource.data.hasReminder is bool
+          && text(request.resource.data.kind, 40) && request.resource.data.hasReminder is bool && request.resource.data.get('paid',false) is bool
           && cents(request.resource.data.amountCents) && request.resource.data.amountCents > 0;
+      }
+      match /categories/{id} {
+        allow read: if owner(uid);
+        allow create, update: if owner(uid)
+          && request.resource.data.keys().hasOnly(['name','custom','archived'])
+          && text(request.resource.data.name,80) && request.resource.data.custom == true && request.resource.data.archived is bool;
+        // Removal archives the document so historic references remain valid.
+      }
+      match /budgets/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && request.resource.data.keys().hasOnly(['categoryId','period','amountCents'])
+          && category(uid,request.resource.data.categoryId)
+          && request.resource.data.period in ['weekly','monthly','semester']
+          && id == request.resource.data.categoryId + '_' + request.resource.data.period
+          && cents(request.resource.data.amountCents) && request.resource.data.amountCents > 0;
+      }
+      match /recurring/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && request.resource.data.keys().hasOnly(['description','categoryId','type','amountCents','startDate','endDate','frequency','active'])
+          && text(request.resource.data.description,200) && category(uid,request.resource.data.categoryId)
+          && date(request.resource.data.startDate) && (request.resource.data.endDate == null || date(request.resource.data.endDate))
+          && request.resource.data.frequency in ['weekly','monthly'] && request.resource.data.active is bool
+          && cents(request.resource.data.amountCents)
+          && ((request.resource.data.type == 'expense' && request.resource.data.amountCents < 0) || (request.resource.data.type == 'income' && request.resource.data.amountCents > 0));
+      }
+      match /bursaries/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && request.resource.data.keys().hasOnly(['name','amountCents','status'])
+          && text(request.resource.data.name,200) && cents(request.resource.data.amountCents) && request.resource.data.amountCents > 0
+          && request.resource.data.status in ['applied','approved','received'];
+      }
+      match /fees/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && request.resource.data.keys().hasOnly(['name','amountCents','deadline','status'])
+          && text(request.resource.data.name,200) && cents(request.resource.data.amountCents) && request.resource.data.amountCents > 0
+          && date(request.resource.data.deadline) && request.resource.data.status in ['kept','opted_out'];
       }
       match /settings/{id} {
         allow read, delete: if owner(uid);
         allow create, update: if owner(uid) && (
-          (id == 'display'
+          (id == 'semester'
+            && request.resource.data.keys().hasOnly(['startDate','endDate','expectedIncomeCents','faculty','studentStatus','courseCount','tuitionPerCourseCents','additionalFeesCents'])
+            && date(request.resource.data.startDate) && date(request.resource.data.endDate)
+            && request.resource.data.startDate < request.resource.data.endDate
+            && request.resource.data.faculty is string && request.resource.data.faculty.size() <= 100
+            && request.resource.data.studentStatus is string && request.resource.data.studentStatus.size() <= 100
+            && request.resource.data.courseCount is int && request.resource.data.courseCount >= 0 && request.resource.data.courseCount <= 30
+            && cents(request.resource.data.expectedIncomeCents) && request.resource.data.expectedIncomeCents >= 0
+            && cents(request.resource.data.tuitionPerCourseCents) && request.resource.data.tuitionPerCourseCents >= 0
+            && cents(request.resource.data.additionalFeesCents) && request.resource.data.additionalFeesCents >= 0)
+          || (id == 'display'
             && request.resource.data.keys().hasOnly(['theme','currency','weekStart','dateFormat'])
             && request.resource.data.get('theme', 'light') in ['light','dark','system']
             && request.resource.data.get('currency', 'CAD') == 'CAD'

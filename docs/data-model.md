@@ -1,125 +1,41 @@
-# Initial data model
+# Data model and persistence
 
-The first working feature is: sign in, create an expense, and retrieve only
-your own transactions. Start with profiles, categories, and transactions.
-Budgets, goals, recurring payments, and forecasts can be modelled as their
-features are implemented.
+The authoritative C++ domain records are in `backend/src/models.hpp`, with Date/DateRange in `date.hpp`, JSON mappings in `codecs.hpp`, and invariant checks in `validation.hpp`. Frontend JSON contracts are in `frontend/src/types/index.ts` and `types/planning.ts`.
 
-## Where definitions live
-
-- `frontend/src/types/index.ts`: TypeScript request and response interfaces.
-- `backend/src/models.hpp`: C++17 structs for the core models and API shapes.
-- This document: shared storage and ownership conventions.
-
-React and C++ exchange JSON; neither language imports the other's types.
-For now, update both files together when changing the API. These definitions
-do not implement JSON parsing, runtime validation, authentication, or persistence.
-The initial definitions are now used alongside the JSON-based API in
-`backend/src/budget.hpp` and the Firestore client in `backend/src/firebase.hpp`.
-See `docs/firestore-setup.md` for current implementation and setup.
-
-## Responsibilities
-
-| Model | Purpose |
-| --- | --- |
-| `UserProfile` | Stored name and optional student ID, keyed by Firebase UID |
-| `ProfileInput` | Fields the user may edit on their own profile |
-| `User` | Profile response for React, including email and display fields |
-| `Category` | Stable category ID and display name |
-| `TransactionInput` | Fields accepted when creating or editing a transaction |
-| `TransactionRecord` | Stored transaction plus document ID and owner UID |
-| `Transaction` | Response for React with the resolved category object |
-
-Use plain structs for data. Later, a transaction service will implement rules
-and calculations, and a repository will handle database requests.
-
-## Proposed Firestore layout
-
-Cloud Firestore is implemented; create the database and publish the supplied
-rules using the setup guide.
+## Per-user document layout
 
 ```text
-users/{uid}
-  fullName: string
-  studentId: string | null
-
-users/{uid}/transactions/{transactionId}
-  date: string                 // YYYY-MM-DD
-  description: string
-  categoryId: string
-  type: "income" | "expense"
-  amountCents: integer
-
-// Categories are currently a fixed server-side catalogue, not documents.
+users/{verifiedUid}                         UserProfile
+  transactions/{id}                        Transaction
+  categories/{id}                          Custom Category (built-ins are in code)
+  budgets/{categoryId}_{period}             CategoryBudget
+  goals/{id}                               SavingsGoal
+  events/{id}                              CalendarEvent
+  recurring/{id}                           RecurringEntry
+  bursaries/{id}                            Bursary
+  fees/{id}                                StudentFee
+  settings/display                         DisplayPreferences
+  settings/reminders                       ReminderSettings
+  settings/notifications                   NotificationPreferences
+  settings/semester                        SemesterPlan
 ```
 
-UIDs and transaction IDs come from document paths; do not duplicate them in
-document fields. `TransactionRecord.ownerUid` is populated from that path.
-Categories are a shared, server-managed catalogue initially. Seed its IDs
-to match the categories used by the frontend when adding persistence.
+`id` is derived from the document path, not duplicated in document fields. Ownership comes from the verified Firebase token, not a JSON ownerUid supplied by the client. Passwords and tokens are not stored in these documents. Removing the user root document alone does not recursively delete subcollections; account deletion is not implemented.
 
-Firebase Auth owns email, passwords, and sign-in state. Do not store passwords
-or bearer tokens in profile documents. Populate the API's `User.email` from
-Firebase identity, and derive `firstName` and `initials` from the profile name
-when building the response (with an empty-name fallback).
+Money is CAD integer cents. Expenses in the transaction ledger and recurring templates are negative; all costs/limits elsewhere are positive. Dates are ISO date-only strings, not Firestore timestamps. Optional fields such as studentId/endDate use null. JSON codecs read defaults for old transaction note/recurrenceId/voided and calendar paid fields, preserving older records.
 
-## Request and response example
+Calculated ledger totals, budget remaining, goal progress, forecast series, semester summaries and notifications are transient results, not independent documents. This avoids stale duplicated totals.
 
-Request: `POST /api/transactions` with the signed-in user's bearer token:
+## Relationships and deletion
 
-```json
-{
-  "date": "2026-11-07",
-  "description": "Groceries",
-  "categoryId": "groceries",
-  "type": "expense",
-  "amountCents": -2450
-}
-```
+A Category has many Transaction and CategoryBudget references through categoryId. A RecurringEntry generates many Transactions with recurrenceId. Each user's collections are isolated; category IDs have meaning only within that user and the fixed catalogue.
 
-An item returned by `GET /api/transactions`:
+Custom category removal archives it. Existing transactions remain readable and editable with their original category. Budget summaries omit archived categories. Existing schedules retain their original category unless edited/paused. Manual transaction deletion removes its document; generated transaction deletion leaves voided=true so retries cannot regenerate it. Schedule deletion does not erase prior transactions. Deleting goals/events/bursaries/fees removes their documents.
 
-```json
-{
-  "id": "server-generated-id",
-  "date": "2026-11-07",
-  "description": "Groceries",
-  "category": { "id": "groceries", "name": "Groceries" },
-  "type": "expense",
-  "amountCents": -2450
-}
-```
+Budget IDs enforce one definition per category/period. Recurrence IDs use rec_<scheduleId>_<date> with create-only writes. Other records use Firestore-generated IDs. No multi-document cascade or cross-record transaction is assumed.
 
-The existing frontend expects create/update/delete operations to return no
-data and then reloads the list. A successful write can return HTTP 204.
+## Migration and deployment
 
-## Rules to enforce when implementing endpoints
+Republish the root firestore.rules before using new screens. Existing data requires no bulk rewrite for the newly optional fields. Legacy prototype categories remain recognized as archived built-ins; users can reclassify entries to the RD defaults. Existing overall spending-limit goals remain goals rather than being silently migrated into category budgets.
 
-- Verify the Firebase token and use its UID to choose the user document path.
-  Do not accept an owner UID in request bodies. Reads, updates, and deletes
-  must all stay within the authenticated user's path.
-- Require integer cents, never floating-point dollars. Expenses are negative,
-  income is positive, and transaction amounts cannot be zero. Reject amounts
-  outside `[-9007199254740991, 9007199254740991]` so JSON numbers remain exact
-  in JavaScript. Check aggregate calculations for overflow and API range too.
-- Initially assume one currency, CAD. The demo's currency preference must not
-  be treated as currency conversion. Add an explicit currency model before
-  supporting balances that mix currencies.
-- Require real calendar dates in `YYYY-MM-DD` format, including leap-year
-  validation. These are transaction dates, not UTC timestamps.
-- Require a nonblank description and a category that exists in the catalogue.
-- Serialize the C++ enum as `"income"` or `"expense"`; reject unknown values.
-  Serialize an absent `studentId` as JSON `null`.
-- Treat TypeScript interfaces and C++ structs as shapes, not validation.
-  Validate incoming JSON before constructing trusted application data.
-- Configure database access alongside the repository. If the backend uses
-  privileged credentials, it must enforce ownership itself; database rules
-  alone are not a substitute for those checks.
-
-## Next implementation milestone
-
-Connect Firebase Auth in React, implement C++ token verification and `/api/me`,
-then add validated transaction creation and listing backed by Firestore.
-Verify that an expense survives a refresh and that a second user cannot read
-or modify it. Add dashboard totals and other calculated responses after this
-flow works.
+There is no local-file persistence or import/export implementation. FR-18 in the RD must be reconciled with the chosen Firestore design.

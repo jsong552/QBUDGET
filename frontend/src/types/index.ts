@@ -51,6 +51,8 @@ export type CategoryId =
   | (string & {})
 
 export interface Category {
+  custom?: boolean
+  archived?: boolean
   id: CategoryId
   name: string
 }
@@ -109,6 +111,7 @@ export interface SpendingActivity {
 export type TransactionType = 'income' | 'expense'
 
 export interface Transaction {
+  note?: string
   id: string
   date: IsoDate
   description: string
@@ -133,7 +136,7 @@ export interface TransactionSummary {
 }
 
 export type TransactionTypeFilter = 'all' | TransactionType
-export type TransactionPeriodFilter = 'all_time' | 'this_month' | 'last_month' | 'this_term'
+export type TransactionPeriodFilter = 'this_week' | 'all_time' | 'this_month' | 'last_month' | 'this_term'
 export type TransactionSortKey = 'date' | 'description' | 'category' | 'type' | 'amount'
 
 export interface TransactionFilters {
@@ -146,6 +149,7 @@ export interface TransactionFilters {
 }
 
 export interface TransactionInput {
+  note?: string
   // Ownership comes from the verified bearer token, never from this input.
   date: IsoDate
   description: string
@@ -214,6 +218,7 @@ export interface BudgetGoalInput {
 export type EventKind = 'rent' | 'credit_card' | 'tuition' | 'utilities' | 'textbook' | (string & {})
 
 export interface CalendarEvent {
+  paid?: boolean
   id: string
   title: string
   /** Shorter label used inside calendar cells. */
@@ -251,6 +256,7 @@ export interface CalendarMonth {
 export type CalendarView = 'month' | 'week'
 
 export interface CalendarEventInput {
+  paid?: boolean
   title: string
   kind: EventKind
   date: IsoDate

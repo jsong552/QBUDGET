@@ -42,6 +42,7 @@ const typeOptions: SelectOption<TransactionTypeFilter>[] = [
 
 const periodOptions: SelectOption<TransactionPeriodFilter>[] = [
   { value: 'all_time', label: 'All time' },
+  { value: 'this_week', label: 'This week' },
   { value: 'this_month', label: 'This month' },
   { value: 'last_month', label: 'Last month' },
   { value: 'this_term', label: 'This term' },
@@ -144,6 +145,8 @@ export function ExpensesPage() {
   const filters = useMemo<TransactionFilters>(() => ({ ...filterChoices, search }), [filterChoices, search])
   const [editing, setEditing] = useState<Transaction | null | undefined>(undefined)
   const { summary, transactions, categories, error, addTransaction, editTransaction, deleteTransaction } = useTransactions(filters)
+  const editableCategories = editing && !categories?.some((c) => c.id === editing.category.id)
+    ? [...(categories ?? []), editing.category] : (categories ?? [])
 
   function onSearchChange(text: string) {
     setSearchText(text)
@@ -187,14 +190,14 @@ export function ExpensesPage() {
       <PageHeader title="Expenses" subtitle="View, add and manage your income and expenses." />
 
       {editing !== undefined && <RecordForm title={editing ? 'Edit transaction' : 'Add transaction'} initial={{
-        date: editing?.date ?? new Date().toISOString().slice(0, 10), description: editing?.description ?? '', categoryId: editing?.category.id ?? 'other', type: editing?.type ?? 'expense', amount: editing ? (Math.abs(editing.amountCents) / 100).toFixed(2) : '',
+        date: editing?.date ?? new Date().toISOString().slice(0, 10), description: editing?.description ?? '', note: editing?.note ?? '', categoryId: editing?.category.id ?? 'other', type: editing?.type ?? 'expense', amount: editing ? (Math.abs(editing.amountCents) / 100).toFixed(2) : '',
       }} fields={[
-        { name: 'date', label: 'Date', type: 'date' }, { name: 'description', label: 'Description' },
+        { name: 'date', label: 'Date', type: 'date' }, { name: 'description', label: 'Description / income source' }, { name: 'note', label: 'Note (optional)', required: false },
         { name: 'type', label: 'Type', options: [{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }] },
-        { name: 'categoryId', label: 'Category', options: (categories ?? []).map((c) => ({ value: c.id, label: c.name })) },
+        { name: 'categoryId', label: 'Category', options: editableCategories.map((c) => ({ value: c.id, label: c.name })) },
         { name: 'amount', label: 'Amount (CAD)', type: 'number' },
       ]} onClose={() => setEditing(undefined)} onSave={(values) => {
-        const input: TransactionInput = { date: values.date, description: values.description, categoryId: values.categoryId, type: values.type as 'income' | 'expense', amountCents: amountToCents(values.amount) * (values.type === 'expense' ? -1 : 1) }
+        const input: TransactionInput = { date: values.date, description: values.description, note: values.note, categoryId: values.categoryId, type: values.type as 'income' | 'expense', amountCents: amountToCents(values.amount) * (values.type === 'expense' ? -1 : 1) }
         return editing ? editTransaction(editing.id, input) : addTransaction(input)
       }} />}
       {summary && (
