@@ -1,51 +1,16 @@
-import { mockDisplayPreferences, mockNotificationPreferences, mockUser } from '../data/mockData'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import { getFirebaseAuth } from '../lib/firebase'
+import { apiClient } from '../lib/apiClient'
 import type { DisplayPreferences, NotificationKey, NotificationPreference, ProfileInput, User } from '../types'
-import { mockMutation, mockResponse } from './mock'
-
-// BACKEND: PUT /api/me (returns the updated user)
-export async function updateProfile(input: ProfileInput): Promise<User> {
-  await mockMutation('updateProfile', input)
-  const names = input.fullName.trim().split(/\s+/)
-  return {
-    ...mockUser,
-    fullName: input.fullName,
-    firstName: names[0] ?? '',
-    initials: names.map((name) => name[0]?.toUpperCase() ?? '').join('').slice(0, 2),
-    studentId: input.studentId,
-  }
+export const updateProfile = (input: ProfileInput) => apiClient.put<User>('/me', input)
+export const getDisplayPreferences = () => apiClient.get<DisplayPreferences>('/me/preferences')
+export const updateDisplayPreferences = (changes: Partial<DisplayPreferences>) => apiClient.patch<void>('/me/preferences', changes)
+export const getNotificationPreferences = () => apiClient.get<NotificationPreference[]>('/me/notification-preferences')
+export const updateNotificationPreference = (key: NotificationKey, enabled: boolean) => apiClient.patch<void>(`/me/notification-preferences/${encodeURIComponent(key)}`, { enabled })
+export async function requestPasswordChange(): Promise<void> {
+  const auth = getFirebaseAuth()
+  if (!auth.currentUser?.email) throw new Error('Sign in first.')
+  await sendPasswordResetEmail(auth, auth.currentUser.email)
 }
-
-// BACKEND: POST /api/me/avatar
-export function uploadAvatar(): Promise<void> {
-  return mockMutation('uploadAvatar')
-}
-
-// BACKEND: GET /api/me/preferences
-export function getDisplayPreferences(): Promise<DisplayPreferences> {
-  return mockResponse(mockDisplayPreferences)
-}
-
-// BACKEND: PATCH /api/me/preferences
-export function updateDisplayPreferences(changes: Partial<DisplayPreferences>): Promise<void> {
-  return mockMutation('updateDisplayPreferences', changes)
-}
-
-// BACKEND: GET /api/me/notification-preferences
-export function getNotificationPreferences(): Promise<NotificationPreference[]> {
-  return mockResponse(mockNotificationPreferences)
-}
-
-// BACKEND: PATCH /api/me/notification-preferences/{key}
-export function updateNotificationPreference(key: NotificationKey, enabled: boolean): Promise<void> {
-  return mockMutation('updateNotificationPreference', { key, enabled })
-}
-
-// BACKEND: POST /api/me/password
-export function requestPasswordChange(): Promise<void> {
-  return mockMutation('requestPasswordChange')
-}
-
-// BACKEND: DELETE /api/me
-export function deleteAccount(): Promise<void> {
-  return mockMutation('deleteAccount')
-}
+export async function uploadAvatar(): Promise<void> { throw new Error('Avatar uploads are not available yet.') }
+export async function deleteAccount(): Promise<void> { throw new Error('Account deletion is not available yet.') }

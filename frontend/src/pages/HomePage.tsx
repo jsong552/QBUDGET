@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router'
+import { DataError } from '../components/DataError'
 import { CalendarDays, ChevronRight, CreditCard, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Card, CardHeader } from '../components/Card'
@@ -102,20 +104,22 @@ function CategoryCard({ breakdown, onViewAllCategories }: { breakdown: CategoryB
 }
 
 export function HomePage() {
+  const navigate = useNavigate()
   const user = useCurrentUser()
   const [range, setRange] = useState<ActivityRange>('month')
-  const { summary, activity, categories } = useDashboard(range)
+  const { error, summary, activity, categories } = useDashboard(range)
 
   function onRangeChange(nextRange: ActivityRange) {
     setRange(nextRange)
   }
 
   function onViewAllCategories() {
-    console.info('[ui] view all categories')
+    navigate('/expenses')
   }
 
   return (
     <div>
+      <DataError error={error} />
       <PageHeader
         title={
           summary && (

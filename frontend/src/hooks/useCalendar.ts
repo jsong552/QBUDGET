@@ -1,6 +1,8 @@
 import { useCallback } from 'react'
 import {
   createEvent,
+  updateEvent,
+  removeEvent,
   getCalendarMonth,
   getCalendarSummary,
   getReminderSettings,
@@ -58,6 +60,8 @@ export function useCalendar(month: IsoDate | null, view: CalendarView) {
     reminders: reminders.data,
     error: summary.error ?? calendarMonth.error ?? upcoming.error ?? reminders.error ?? mutationError,
     addEvent,
+    editEvent: (id: string, input: CalendarEventInput) => run(() => updateEvent(id, input), { onSuccess: reloadAfterChange }),
+    deleteEvent: (id: string) => run(() => removeEvent(id), { onSuccess: reloadAfterChange }),
     changeReminders,
   }
 }

@@ -1,3 +1,6 @@
+import { RecordForm } from '../components/RecordForm'
+import { amountToCents } from '../lib/moneyInput'
+import { DataError } from '../components/DataError'
 import {
   Bell,
   BookOpen,
@@ -26,7 +29,7 @@ import { toneClasses, type Tone } from '../components/tones'
 import { useCalendar } from '../hooks/useCalendar'
 import { buildMonthGrid, shiftMonth, weekdayLabels, type CalendarDay } from '../lib/calendar'
 import { formatDate, formatDaysAway, formatMoney } from '../lib/format'
-import type { CalendarEvent, CalendarEventInput, CalendarMonth, CalendarView, EventKind, IsoDate, ReminderLeadTime, UpcomingEvent } from '../types'
+import type { CalendarEvent, CalendarMonth, CalendarView, EventKind, IsoDate, ReminderLeadTime, UpcomingEvent } from '../types'
 
 interface EventStyle {
   icon: LucideIcon
@@ -59,7 +62,7 @@ const leadTimeOptions: SelectOption<ReminderLeadTime>[] = [
   { value: '1_week', label: '1 week before' },
 ]
 
-const newEventDraft: CalendarEventInput = { title: '', kind: 'rent', date: '', amountCents: 0, hasReminder: true }
+
 
 function EventPill({ event }: { event: CalendarEvent }) {
   const { icon: Icon, tone } = getEventStyle(event.kind)
@@ -162,7 +165,8 @@ function UpcomingEventRow({ upcoming }: { upcoming: UpcomingEvent }) {
 export function CalendarPage() {
   const [requestedMonth, setRequestedMonth] = useState<IsoDate | null>(null)
   const [view, setView] = useState<CalendarView>('month')
-  const { summary, calendarMonth, upcoming, reminders, addEvent, changeReminders } = useCalendar(requestedMonth, view)
+  const [editing, setEditing] = useState<CalendarEvent | null | undefined>()
+  const { summary, calendarMonth, upcoming, reminders, error, addEvent, editEvent, deleteEvent, changeReminders } = useCalendar(requestedMonth, view)
 
   function onPreviousMonth() {
     if (calendarMonth) setRequestedMonth(shiftMonth(calendarMonth.month, -1))
@@ -177,11 +181,11 @@ export function CalendarPage() {
   }
 
   function onCreateEvent() {
-    return addEvent(newEventDraft)
+    setEditing(null)
   }
 
   function onViewAllEvents() {
-    console.info('[ui] view all upcoming events')
+    if (upcoming?.length) setRequestedMonth(upcoming[0].event.date.slice(0, 7) + '-01')
   }
 
   function onEmailRemindersChange(emailEnabled: boolean) {
@@ -194,6 +198,12 @@ export function CalendarPage() {
 
   return (
     <div>
+      <DataError error={error} />
+      {editing !== undefined && <RecordForm title={editing ? 'Edit scheduled payment' : 'Schedule a payment'} initial={{ title: editing?.title ?? '', date: editing?.date ?? new Date().toISOString().slice(0, 10), kind: editing?.kind ?? 'rent', amount: editing ? (editing.amountCents / 100).toFixed(2) : '', reminder: editing?.hasReminder === false ? 'false' : 'true', paid: editing?.paid ? 'true' : 'false' }} fields={[
+        { name: 'title', label: 'Title' }, { name: 'date', label: 'Due date', type: 'date' }, { name: 'kind', label: 'Kind', options: ['rent', 'credit_card', 'tuition', 'utilities', 'textbook', 'other'].map((value) => ({ value, label: value.replace('_', ' ') })) }, { name: 'amount', label: 'Amount (CAD)', type: 'number' },
+        { name: 'reminder', label: 'In-app reminder', options: [{ value: 'true', label: 'Enabled' }, { value: 'false', label: 'Disabled' }] },
+        { name: 'paid', label: 'Payment status', options: [{ value: 'false', label: 'Unpaid' }, { value: 'true', label: 'Paid (record actual expense separately)' }] },
+      ]} onClose={() => setEditing(undefined)} onDelete={editing ? () => deleteEvent(editing.id) : undefined} onSave={v => { const input = { title: v.title, date: v.date, kind: v.kind, amountCents: amountToCents(v.amount), hasReminder: v.reminder === 'true', paid: v.paid === 'true' }; return editing ? editEvent(editing.id, input) : addEvent(input) }} />}
       <PageHeader
         title="Calendar"
         subtitle="Keep track of your upcoming payments and important financial dates."
@@ -219,12 +229,13 @@ export function CalendarPage() {
             tone="info"
             icon={Bell}
             label="Next payment"
-            value={formatMoney(summary.nextPayment.amountCents)}
-            caption={`${summary.nextPayment.label} • ${formatDate(summary.nextPayment.date)}`}
+            value={summary.nextPayment ? formatMoney(summary.nextPayment.amountCents) : 'No payments'}
+            caption={summary.nextPayment ? `${summary.nextPayment.label} - ${formatDate(summary.nextPayment.date)}` : 'Add a scheduled payment to get started.'}
           />
         </div>
       )}
 
+      <Card className="mt-5 p-5"><h2 className="text-lg font-bold">Payments in the selected month</h2><ul>{calendarMonth?.events.map(event => <li key={event.id} className="flex items-center justify-between border-b border-line py-2"><span>{event.title} - {event.date} - {formatMoney(event.amountCents)} {event.paid ? '(paid)' : ''}</span><Button variant="outline" onClick={() => setEditing(event)}>Edit</Button></li>)}</ul></Card>
       <div className="mt-5 grid grid-cols-[2fr_1fr] gap-5">
         <Card className="px-0 pt-5 pb-0">
           {calendarMonth && (
@@ -246,7 +257,7 @@ export function CalendarPage() {
                   </Button>
                 </div>
               </div>
-              <MonthGrid calendarMonth={calendarMonth} nextPaymentDate={summary?.nextPayment.date} />
+              <MonthGrid calendarMonth={calendarMonth} nextPaymentDate={summary?.nextPayment?.date} />
             </>
           )}
         </Card>
@@ -255,7 +266,7 @@ export function CalendarPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold tracking-tight text-ink">Upcoming events</h2>
             <button type="button" onClick={onViewAllEvents} className="flex items-center gap-0.5 text-sm text-muted hover:text-ink">
-              View all <ChevronRight className="size-4" />
+              Show next payment <ChevronRight className="size-4" />
             </button>
           </div>
           <ul className="mt-3 space-y-2">
@@ -268,9 +279,9 @@ export function CalendarPage() {
             <div className="mt-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold tracking-tight text-ink">Email reminders</h3>
-                <Toggle checked={reminders.emailEnabled} label="Email reminders" onChange={onEmailRemindersChange} />
+                <Toggle disabled checked={reminders.emailEnabled} label="Email reminders" onChange={onEmailRemindersChange} />
               </div>
-              <p className="mt-1 text-sm text-muted">Receive email notifications for upcoming payments.</p>
+              <p className="mt-1 text-sm text-muted">Email delivery is not available yet. Reminder timing below controls in-app alerts.</p>
               <Select label="Reminder timing" value={reminders.leadTime} options={leadTimeOptions} onChange={onLeadTimeChange} className="mt-4" />
             </div>
           )}

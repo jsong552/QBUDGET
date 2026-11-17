@@ -1,21 +1,16 @@
 import { useCallback } from 'react'
-import { getForecastCategoryBreakdown, getForecastSeries, getForecastSummary, getMonthlyBreakdown } from '../services/forecastService'
-import { createGoal, listGoals, removeGoal, updateGoal } from '../services/goalService'
+import { getForecast } from '../services/forecastService'
+import { createGoal, removeGoal, updateGoal } from '../services/goalService'
 import type { BudgetGoalInput, ForecastGranularity } from '../types'
 import { useAsync } from './useAsync'
 import { useMutation } from './useMutation'
 
 export function useForecast(granularity: ForecastGranularity) {
-  const loadSeries = useCallback(() => getForecastSeries(granularity), [granularity])
-
-  const summary = useAsync(getForecastSummary)
-  const series = useAsync(loadSeries)
-  const categories = useAsync(getForecastCategoryBreakdown)
-  const breakdown = useAsync(getMonthlyBreakdown)
-  const goals = useAsync(listGoals)
+  const load = useCallback(() => getForecast(granularity), [granularity])
+  const resource = useAsync(load)
   const { run, error: mutationError } = useMutation()
 
-  const reloadGoals = goals.reload
+  const reloadGoals = resource.reload
 
   const addGoal = useCallback((input: BudgetGoalInput) => run(() => createGoal(input), { onSuccess: reloadGoals }), [run, reloadGoals])
 
@@ -27,12 +22,12 @@ export function useForecast(granularity: ForecastGranularity) {
   const deleteGoal = useCallback((id: string) => run(() => removeGoal(id), { onSuccess: reloadGoals }), [run, reloadGoals])
 
   return {
-    summary: summary.data,
-    series: series.data,
-    categories: categories.data,
-    breakdown: breakdown.data,
-    goals: goals.data,
-    error: summary.error ?? series.error ?? categories.error ?? breakdown.error ?? goals.error ?? mutationError,
+    summary: resource.data?.summary,
+    series: resource.data?.series,
+    categories: resource.data?.categories,
+    breakdown: resource.data?.breakdown,
+    goals: resource.data?.goals,
+    error: resource.error ?? mutationError,
     addGoal,
     editGoal,
     deleteGoal,

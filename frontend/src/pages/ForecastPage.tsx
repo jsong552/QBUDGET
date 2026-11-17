@@ -1,3 +1,6 @@
+import { RecordForm } from '../components/RecordForm'
+import { amountToCents } from '../lib/moneyInput'
+import { DataError } from '../components/DataError'
 import { ArrowDown, EllipsisVertical, GraduationCap, House, Plus, Target, TrendingUp, Wallet, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../components/Button'
@@ -13,7 +16,7 @@ import { forecastChartPalette, getChartTone } from '../components/categoryStyles
 import { toneClasses, type Tone } from '../components/tones'
 import { useForecast } from '../hooks/useForecast'
 import { formatDate, formatMoney } from '../lib/format'
-import type { BudgetGoal, BudgetGoalInput, CategoryBreakdown, ForecastGranularity, GoalKind, MonthlyBreakdown } from '../types'
+import type { BudgetGoal, CategoryBreakdown, ForecastGranularity, GoalKind, MonthlyBreakdown } from '../types'
 
 const granularityOptions: { value: ForecastGranularity; label: string }[] = [
   { value: 'weekly', label: 'Weekly' },
@@ -35,7 +38,7 @@ const goalStyles: Partial<Record<GoalKind, GoalStyle>> = {
 /** Neutral style for goal kinds the UI has no entry for. */
 const fallbackGoalStyle: GoalStyle = { icon: Target, iconTone: 'quiet', barTone: 'quiet' }
 
-const newGoalDraft: BudgetGoalInput = { kind: 'savings', title: '', targetCents: 0 }
+
 
 function CategoryCard({ breakdown, termLabel }: { breakdown: CategoryBreakdown; termLabel: string }) {
   const slices = breakdown.items.map((item) => ({
@@ -46,7 +49,7 @@ function CategoryCard({ breakdown, termLabel }: { breakdown: CategoryBreakdown; 
 
   return (
     <Card className="px-6 pt-5 pb-6">
-      <CardHeader title="Spending by category" subtitle={`Projected expenses for ${termLabel}.`} />
+      <CardHeader title="Spending by category" subtitle={`Recorded spending for ${termLabel}.`} />
       <div className="mt-5 flex items-center gap-7">
         <DonutChart slices={slices} centerValue={formatMoney(breakdown.totalCents, { cents: false })} centerLabel="total" size={148} thickness={24} />
         <ul className="flex-1 space-y-3.5">
@@ -120,22 +123,27 @@ function BreakdownTable({ breakdown }: { breakdown: MonthlyBreakdown }) {
 
 export function ForecastPage() {
   const [granularity, setGranularity] = useState<ForecastGranularity>('monthly')
-  const { summary, series, categories, breakdown, goals, addGoal } = useForecast(granularity)
+  const [editing, setEditing] = useState<BudgetGoal | null | undefined>(undefined)
+  const { summary, series, categories, breakdown, goals, error, addGoal, editGoal, deleteGoal } = useForecast(granularity)
 
   function onGranularityChange(next: ForecastGranularity) {
     setGranularity(next)
   }
 
   function onAddGoal() {
-    return addGoal(newGoalDraft)
+    setEditing(null)
   }
 
   function onOpenGoalMenu(goal: BudgetGoal) {
-    console.info('[ui] open goal menu', goal.id)
+    setEditing(goal)
   }
 
   return (
     <div>
+      <DataError error={error} />
+      {editing !== undefined && <RecordForm title={editing ? 'Edit budget goal' : 'Add budget goal'} initial={{ title: editing?.title ?? '', kind: editing?.kind ?? 'savings', amount: editing ? (editing.targetCents / 100).toFixed(2) : '' }} fields={[
+        { name: 'title', label: 'Title' }, { name: 'kind', label: 'Goal type', options: [{ value: 'savings', label: 'Savings (overall balance)' }, { value: 'spending_limit', label: 'Monthly spending limit' }] }, { name: 'amount', label: 'Target (CAD)', type: 'number' },
+      ]} onClose={() => setEditing(undefined)} onDelete={editing ? () => deleteGoal(editing.id) : undefined} onSave={(v) => { const input = { title: v.title, kind: v.kind, targetCents: amountToCents(v.amount) }; return editing ? editGoal(editing.id, input) : addGoal(input) }} />}
       <PageHeader
         title="Forecast"
         subtitle="View your spending trends, set goals, and see a prediction of your budget."

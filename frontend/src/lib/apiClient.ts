@@ -1,13 +1,13 @@
 const baseUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
 /**
- * Bearer token sent with every request. AuthProvider keeps it in sync with the session.
- * Planned: the Firebase ID token, verified by the C++ API. Null while sign-in is mocked, so no header is sent.
+ * Ask Firebase for a current ID token on every request, refreshing when needed.
+ * The C++ API must implement verification before exposing protected data.
  */
-let authToken: string | null = null
+let tokenProvider: (() => Promise<string | null>) | null = null
 
-export function setAuthToken(token: string | null) {
-  authToken = token
+export function setAuthTokenProvider(provider: (() => Promise<string | null>) | null) {
+  tokenProvider = provider
 }
 
 export class ApiError extends Error {
@@ -32,7 +32,8 @@ interface RequestOptions {
  * Single entry point for calls to the QBudget API.
  * `path` is relative to `/api`, e.g. `apiRequest('/transactions')`.
  */
-export async function apiRequest<T>(path: string, { method = 'GET', body, timeoutMs = 10000 }: RequestOptions = {}): Promise<T> {
+export async function apiRequest<T>(path: string, { method = 'GET', body, timeoutMs = 60000 }: RequestOptions = {}): Promise<T> {
+  const authToken = await tokenProvider?.()
   const response = await fetch(`${baseUrl}/api${path}`, {
     method,
     headers: {
@@ -44,7 +45,8 @@ export async function apiRequest<T>(path: string, { method = 'GET', body, timeou
   })
 
   if (!response.ok) {
-    throw new ApiError(response.status, `API returned HTTP ${response.status}`)
+    const payload = await response.json().catch(() => null) as { error?: unknown } | null
+    throw new ApiError(response.status, typeof payload?.error === 'string' ? payload.error : `API returned HTTP ${response.status}`)
   }
 
   if (response.status === 204) {
