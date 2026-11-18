@@ -1,7 +1,21 @@
 // Category catalogue and archival policy. Legacy categories remain readable, not selectable for new entries.
 #pragma once
 #include "repositories.hpp"
+#include <cctype>
 namespace qbudget {
+inline std::string trimName(const std::string &value) {
+    auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return "";
+    return value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
+}
+// Category names compare trimmed and case-insensitively, so "Books", " books" and "BOOKS" are one category.
+inline std::string nameKey(const std::string &value) {
+    auto key = trimName(value);
+    for (char &c : key)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return key;
+}
 class CategoryService {
     CategoryRepository &repository;
 
@@ -43,18 +57,34 @@ class CategoryService {
     void requireActive(const std::string &id) const {
         require(!find(id).archived, "This category was removed. Choose an active category.");
     }
-    std::string create(std::string name) const {
-        require(!name.empty() && name.size() <= 80 && name.find_first_not_of(" \t\r\n") != std::string::npos,
-                "Enter a category name.");
-        for (const auto &c : list())
-            require(c.name != name, "A category with this name already exists.");
-        return repository.add(Category{"", std::move(name), true, false});
+    std::string create(const std::string &name) const {
+        auto trimmed = trimName(name);
+        require(!trimmed.empty() && trimmed.size() <= 80, "Enter a category name.");
+        auto key = nameKey(trimmed);
+        auto all = list(true);
+        // Archived names stay free: legacy built-ins can be recreated as custom categories.
+        for (const auto &c : all)
+            require(c.archived || nameKey(c.name) != key, "A category with this name already exists.");
+        // Reusing an archived custom name restores that category, reconnecting its transactions and budgets.
+        for (auto c : all)
+            if (c.custom && c.archived && nameKey(c.name) == key) {
+                c.archived = false;
+                c.name = trimmed;
+                repository.save(c.id, c);
+                return c.id;
+            }
+        return repository.add(Category{"", trimmed, true, false});
     }
     void remove(const std::string &id) const {
-        auto value = find(id);
-        require(value.custom, "Default categories cannot be removed.");
-        value.archived = true;
-        repository.save(id, value); // preserve references and historical chart labels
+        auto all = list(true);
+        auto found = std::find_if(all.begin(), all.end(), [&](const Category &c) { return c.id == id; });
+        if (found == all.end())
+            throw ApiError(404, "Category not found.");
+        require(found->custom, "Default categories cannot be removed.");
+        if (found->archived)
+            return;
+        found->archived = true;
+        repository.save(id, *found); // preserve references and historical chart labels
     }
 };
 } // namespace qbudget
