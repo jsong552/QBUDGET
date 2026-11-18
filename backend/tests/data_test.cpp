@@ -109,6 +109,38 @@ int main() {
             budgets.summaries(Ledger(transactionRepo.list(), Date("2026-12-01")), Date("2026-12-01"));
         check(reset[0].spentCents == 9999, "New period includes only new-period spending");
         check(transactionRepo.list().size() == 4, "Reset retains history");
+        {
+            MemoryStore store;
+            CategoryRepository catalogueRepo(store);
+            CategoryService catalogue(catalogueRepo);
+            auto books = catalogue.create("  Books ");
+            check(catalogue.find(books).name == "Books", "Category name trimmed");
+            fails(400, [&] { catalogue.create("BOOKS"); });
+            fails(400, [&] { catalogue.create("groceries"); });
+            catalogue.remove(books);
+            catalogue.remove(books); // already archived: no-op
+            check(catalogue.create("books") == books && !catalogue.find(books).archived,
+                  "Recreating an archived name restores the same category");
+            check(catalogue.list().size() == 8, "No duplicate category after restore");
+            check(catalogue.create("Food") != "food", "Legacy archived built-in names stay available");
+            fails(404, [&] { catalogue.remove("missing"); });
+            fails(400, [&] { catalogue.remove("groceries"); });
+
+            BudgetRepository limitRepo(store);
+            BudgetService limits(limitRepo, catalogue);
+            fails(400, [&] { limits.set({"", "income", BudgetPeriod::Monthly, 1000}); });
+            limits.set({"", books, BudgetPeriod::Weekly, 1000});
+            limits.set({"", "groceries", BudgetPeriod::Monthly, 1000});
+            limitRepo.save("ghost_monthly", {"", "ghost", BudgetPeriod::Monthly, 500}, false);
+            catalogue.remove(books);
+            store.listCalls = 0;
+            auto rows = limits.summaries(Ledger({}, Date("2026-11-08")), Date("2026-11-08"));
+            check(rows.size() == 1 && rows[0].category.id == "groceries",
+                  "Summaries skip archived and missing categories");
+            check(store.listCalls == 2, "Summaries read the category catalogue once");
+            limits.remove("groceries_monthly");
+            fails(404, [&] { limits.remove("groceries_monthly"); });
+        }
         auto summary = call(db, "GET", "/api/transactions/summary", nullptr, {{"period", "last_month"}});
         check(summary["totalIncomeCents"] == 0 && summary["totalExpensesCents"] == 1000,
               "Selected-period API totals");
