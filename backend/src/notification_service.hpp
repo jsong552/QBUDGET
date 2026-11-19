@@ -16,7 +16,7 @@ class NotificationService {
             for (const auto &item : events)
                 if (item.daysAway <= lead && item.event.hasReminder)
                     result.push_back({"payment_" + item.event.id,
-                                      item.event.title + " is due " + item.event.date.str(), now, false});
+                                      item.event.title + (item.daysAway < 0 ? " is overdue since " : " is due ") + item.event.date.str(), now, false});
         for (const auto &budget : budgets)
             if (budget.overBudget)
                 result.push_back({"budget_" + budget.category.id + "_" + budget.range.start.str() + "_" +

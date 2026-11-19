@@ -49,6 +49,9 @@ export async function apiRequest<T>(path: string, { method = 'GET', body, timeou
     throw new ApiError(response.status, typeof payload?.error === 'string' ? payload.error : `API returned HTTP ${response.status}`)
   }
 
+  if (method !== 'GET' && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('qbudget:data-changed'))
+  }
   if (response.status === 204) {
     return undefined as T
   }

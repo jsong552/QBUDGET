@@ -239,6 +239,67 @@ int main() {
         Json encoded = {{"amountCents", -2450}, {"studentId", nullptr}, {"enabled", true}};
         check(document({{"fields", toValue(encoded)["mapValue"]["fields"]}}) == encoded,
               "Firestore scalar roundtrip");
+
+        // Calendar API: date ranges, persistence, overdue alerts and retry-safe payments.
+        {
+        MemoryStore calendarDb;
+        EventRepository ce(calendarDb);
+        RecurringRepository cr(calendarDb);
+        TransactionRepository ct(calendarDb);
+        CategoryRepository cc(calendarDb);
+        CategoryService cs(cc);
+        auto overdueId = ce.add({"", "Old rent", "rent", Date("2026-10-30"), 50000, true, false});
+        auto futureId = ce.add({"", "Tuition", "tuition", Date("2026-11-10"), 10000, true, false});
+        auto recurringId = cr.add({"", "Weekly bill", "other", TransactionType::Expense, -2500,
+            Date("2026-11-01"), std::nullopt, RecurrenceFrequency::Weekly, true});
+        auto incomeId = cr.add({"", "Payday", "income", TransactionType::Income, 50000,
+            Date("2026-11-08"), std::nullopt, RecurrenceFrequency::Monthly, true});
+        auto monthView = call(calendarDb, "GET", "/api/calendar/events", nullptr, {{"month", "2026-11-01"}});
+        check(monthView["events"].size() == 7, "Calendar combines events, recurring expenses and income");
+        auto weekView = call(calendarDb, "GET", "/api/calendar/events", nullptr, {{"month", "2026-11-08"}, {"view", "week"}});
+        check(weekView["rangeStart"] == "2026-11-08" && weekView["rangeEnd"] == "2026-11-15", "Sunday week API");
+        check(weekView["events"].size() == 3, "Week response filters occurrences");
+        SettingsRepository(calendarDb).save("display", DisplayPreferences{"light", "CAD", "monday", "MMM_DD_YYYY"});
+        weekView = call(calendarDb, "GET", "/api/calendar/events", nullptr, {{"month", "2027-01-01"}, {"view", "week"}});
+        check(weekView["rangeStart"] == "2026-12-28" && weekView["rangeEnd"] == "2027-01-04", "Week crosses year and respects preference");
+        fails(400, [&] { call(calendarDb, "GET", "/api/calendar/events", nullptr, {{"view", "invalid"}}); });
+        auto calSummary = call(calendarDb, "GET", "/api/calendar/summary");
+        check(calSummary["overdueCount"] == 2 && calSummary["overdueTotalCents"] == 52500, "Overdue totals exclude future and income");
+        check(calSummary["upcomingCount"] == 6, "Upcoming totals exclude overdue and income");
+        auto notices = call(calendarDb, "GET", "/api/notifications");
+        check(notices.dump().find("overdue since") != std::string::npos, "Overdue notification generated");
+        Json payment = {{"source", "event"}, {"sourceId", overdueId}, {"date", "2026-10-30"}, {"paidDate", "2026-11-08"}};
+        auto receipt = call(calendarDb, "POST", "/api/calendar/pay", payment);
+        call(calendarDb, "POST", "/api/calendar/pay", payment);
+        check(ct.list().size() == 1 && ct.list()[0].amountCents == -50000 && ct.list()[0].date == Date("2026-11-08"), "Payment records one expense using actual date, even after retry");
+        check(call(calendarDb, "GET", "/api/calendar/summary")["overdueCount"] == 1, "Recorded overdue event leaves pending list");
+        check(CalendarService(ce, &ct).list()[0].paid, "Forecast/semester service sees recorded event as paid");
+        auto changed = ce.find(overdueId).value(); changed.amountCents++;
+        fails(400, [&] { call(calendarDb, "PUT", "/api/calendar/events/" + overdueId, Json(changed)); });
+        payment["paidDate"] = "2026-11-09";
+        fails(400, [&] { call(calendarDb, "POST", "/api/calendar/pay", payment); });
+        payment = {{"source", "recurring"}, {"sourceId", recurringId}, {"date", "2026-11-08"}, {"paidDate", "2026-11-08"}};
+        call(calendarDb, "POST", "/api/calendar/pay", payment);
+        RecurrenceService(cr, ct, cs).sync(Date("2026-11-08"));
+        auto beforeRetry = ct.list().size();
+        call(calendarDb, "POST", "/api/calendar/pay", payment);
+        check(ct.list().size() == beforeRetry, "Recurring sync and payment use same occurrence ID");
+        payment["date"] = "2026-11-09";
+        fails(400, [&] { call(calendarDb, "POST", "/api/calendar/pay", payment); });
+        payment["sourceId"] = "missing";
+        fails(404, [&] { call(calendarDb, "POST", "/api/calendar/pay", payment); });
+        TransactionService(ct, cs).remove("cal_" + overdueId);
+        check(call(calendarDb, "GET", "/api/calendar/summary")["overdueCount"] == 0, "Deleted transaction is explicitly skipped, not silently re-created");
+        payment = {{"source", "event"}, {"sourceId", overdueId}, {"paidDate", "2026-11-08"}};
+        fails(400, [&] { call(calendarDb, "POST", "/api/calendar/pay", payment); });
+        call(calendarDb, "DELETE", "/api/calendar/events/" + overdueId);
+        check(ct.list().size() == beforeRetry, "Deleting event preserves ledger history");
+        check(call(MemoryStore{}, "GET", "/api/calendar/events")["events"].empty(), "Other account sees no calendar data");
+        auto legacy = ce.add({"", "Already paid", "other", Date("2026-11-08"), 500, true, true});
+        fails(400, [&] { call(calendarDb, "POST", "/api/calendar/pay", {{"source", "event"}, {"sourceId", legacy}, {"paidDate", "2026-11-08"}}); });
+        CalendarEvent paidCreate{"", "New paid", "other", Date("2026-11-08"), 500, true, true};
+        fails(400, [&] { call(calendarDb, "POST", "/api/calendar/events", Json(paidCreate)); });
+        }
         std::cout << checks << " backend checks passed.\n";
         return 0;
     } catch (const std::exception &error) {
