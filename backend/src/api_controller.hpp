@@ -271,10 +271,16 @@ class ApiController {
             return {{"created", recurrence.sync(now)}};
         if (req.method == "GET")
             return recurrence.list();
-        if (req.method == "POST")
-            recurrence.create(body(req).get<RecurringEntry>());
-        else if (req.method == "PUT")
-            recurrence.update(suffix(req.path, "/api/recurring"), body(req).get<RecurringEntry>());
+        if (req.method == "POST") {
+            auto entry = body(req).get<RecurringEntry>();
+            requireNewerSchedule(entry, now);
+            recurrence.create(entry);
+        }
+        else if (req.method == "PUT") {
+            auto entry = body(req).get<RecurringEntry>();
+            requireNewerSchedule(entry, now);
+            recurrence.update(suffix(req.path, "/api/recurring"), entry);
+        }
         else if (req.method == "DELETE")
             recurrence.remove(suffix(req.path, "/api/recurring"));
         else

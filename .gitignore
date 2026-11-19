@@ -4,3 +4,4 @@ backend/build/
 !.env.example
 .history
 /tmp/
+.DS_Store
