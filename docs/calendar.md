@@ -1,5 +1,9 @@
 # Calendar behavior
 
+The API uses the browser's timezone offset to determine today's date consistently
+for the grid, payment validation and reminders. See [timezone.md](timezone.md) for
+the request contract and regression checks.
+
 The calendar supports month and week views, Today and previous/next navigation,
 and the user's saved Sunday/Monday week-start preference. Click a date to create
 a scheduled payment or click an entry to inspect it, edit it, or record payment.
