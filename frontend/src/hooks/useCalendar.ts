@@ -1,6 +1,8 @@
 import { useCallback } from 'react'
 import {
   createEvent,
+  recordCalendarPayment,
+  type CalendarPaymentInput,
   updateEvent,
   removeEvent,
   getCalendarMonth,
@@ -13,7 +15,7 @@ import type { CalendarEventInput, CalendarView, IsoDate, ReminderSettings } from
 import { useAsync } from './useAsync'
 import { useMutation } from './useMutation'
 
-/** `month` is the first day of the month to show, or null for the current month. */
+/** `month` is an anchor date in the requested month/week, or null for today. */
 export function useCalendar(month: IsoDate | null, view: CalendarView) {
   const loadMonth = useCallback(() => getCalendarMonth(month, view), [month, view])
 
@@ -62,6 +64,7 @@ export function useCalendar(month: IsoDate | null, view: CalendarView) {
     addEvent,
     editEvent: (id: string, input: CalendarEventInput) => run(() => updateEvent(id, input), { onSuccess: reloadAfterChange }),
     deleteEvent: (id: string) => run(() => removeEvent(id), { onSuccess: reloadAfterChange }),
+    recordPayment: (input: CalendarPaymentInput) => run(() => recordCalendarPayment(input), { onSuccess: reloadAfterChange }),
     changeReminders,
   }
 }

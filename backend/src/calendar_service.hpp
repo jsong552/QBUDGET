@@ -4,11 +4,20 @@
 namespace qbudget {
 class CalendarService {
     EventRepository &repository;
+    TransactionRepository *transactions;
 
   public:
-    explicit CalendarService(EventRepository &repo) : repository(repo) {}
+    explicit CalendarService(EventRepository &repo, TransactionRepository *ledger = nullptr)
+        : repository(repo), transactions(ledger) {}
     std::vector<CalendarEvent> list(std::optional<DateRange> range = std::nullopt) const {
         auto values = repository.list();
+        if (transactions) {
+            auto recorded = transactions->list();
+            for (auto &event : values)
+                for (const auto &row : recorded)
+                    // Paid and deliberately skipped occurrences are no longer future obligations.
+                    if (row.id == "cal_" + event.id) event.paid = true;
+        }
         values.erase(
             std::remove_if(values.begin(), values.end(),
                            [&](const CalendarEvent &e) { return range && !range->contains(e.date); }),
@@ -20,7 +29,7 @@ class CalendarService {
     std::vector<UpcomingEvent> upcoming(Date now) const {
         std::vector<UpcomingEvent> result;
         for (const auto &event : list())
-            if (!event.paid && now <= event.date) {
+            if (!event.paid) {
                 auto days = now.daysUntil(event.date);
                 result.push_back({event, days, days <= 3});
             }
@@ -30,6 +39,12 @@ class CalendarService {
         return repository.add(event);
     }
     void update(const std::string &id, const CalendarEvent &event) const {
+        auto current = repository.find(id);
+        if (!current) throw ApiError(404, "Calendar event not found.");
+        if (transactions && transactions->find("cal_" + id)) {
+            require(current->amountCents == event.amountCents && current->date == event.date &&
+                    current->kind == event.kind, "Recorded payments retain their amount, due date and kind. Edit the transaction separately.");
+        }
         repository.save(id, event);
     }
     void remove(const std::string &id) const {

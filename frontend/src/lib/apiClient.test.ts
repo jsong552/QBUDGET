@@ -1,7 +1,36 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { apiClient, setAuthTokenProvider } from './apiClient'
 
-afterEach(() => { setAuthTokenProvider(null); vi.unstubAllGlobals() })
+afterEach(() => { setAuthTokenProvider(null); vi.unstubAllGlobals(); vi.restoreAllMocks() })
+it('sends the current timezone offset on every request, including after an offset change', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+  vi.stubGlobal('fetch', fetch)
+  const offset = vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(300)
+  await apiClient.get('/calendar/events')
+  expect(fetch.mock.calls[0][1].headers['X-Timezone-Offset']).toBe('300')
+
+  offset.mockReturnValue(240)
+  await apiClient.post('/calendar/pay', {})
+  expect(fetch.mock.calls[1][1].headers['X-Timezone-Offset']).toBe('240')
+
+  offset.mockReturnValue(-345)
+  await apiClient.get('/notifications')
+  expect(fetch.mock.calls[2][1].headers['X-Timezone-Offset']).toBe('-345')
+})
+it('refreshes subscribers after successful writes, but not failed writes or reads', async () => {
+  const dispatchEvent = vi.fn()
+  vi.stubGlobal('window', { dispatchEvent })
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+  vi.stubGlobal('fetch', fetch)
+  await apiClient.post('/calendar/pay', {})
+  expect(dispatchEvent).toHaveBeenCalledTimes(1)
+  expect(dispatchEvent.mock.calls[0][0].type).toBe('qbudget:data-changed')
+  await apiClient.get('/calendar/events')
+  expect(dispatchEvent).toHaveBeenCalledTimes(1)
+  fetch.mockResolvedValueOnce(new Response('{}', { status: 400 }))
+  await expect(apiClient.put('/calendar/reminders', {})).rejects.toThrow()
+  expect(dispatchEvent).toHaveBeenCalledTimes(1)
+})
 it('sends the latest bearer token, and omits authorization when signed out', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
   vi.stubGlobal('fetch', fetch)

@@ -26,6 +26,15 @@ Money is CAD integer cents. Expenses in the transaction ledger and recurring tem
 
 Calculated ledger totals, budget remaining, goal progress, forecast series, semester summaries and notifications are transient results, not independent documents. This avoids stale duplicated totals.
 
+Calendar week/month responses also project recurring occurrences without storing
+duplicate events. Calendar-recorded payments use transaction IDs `cal_<eventId>`;
+their `recurrenceId` is `calendar:<eventId>` so deletion retains a tombstone.
+Recurring calendar payments share `rec_<scheduleId>_<dueDate>` IDs with recurring
+sync. The actual transaction date is the selected payment date. Calendar payment
+status is derived from this transaction, falling back to the legacy event `paid`
+flag when no linked transaction exists. A voided transaction appears as a skipped
+occurrence. See [Calendar behavior](calendar.md) for editing/deletion semantics.
+
 ## Relationships and deletion
 
 A Category has many Transaction and CategoryBudget references through categoryId. A RecurringEntry generates many Transactions with recurrenceId. Each user's collections are isolated; category IDs have meaning only within that user and the fixed catalogue.

@@ -6,6 +6,7 @@
 #include "forecast_service.hpp"
 #include "student_service.hpp"
 #include "notification_service.hpp"
+#include "calendar_planner.hpp"
 namespace qbudget {
 class ApiController {
     AuthenticatedUser user;
@@ -204,67 +205,62 @@ class ApiController {
             throw ApiError(405, "Unsupported goal operation.");
         return nullptr;
     }
+    CalendarPlanner planner() {
+        return CalendarPlanner(eventRepository, recurringRepository, transactionRepository);
+    }
     Json calendarRoute(const httplib::Request &req) {
+        if (req.path == "/api/calendar/pay")
+            return {{"transactionId", planner().record(body(req), now)}};
         if (req.path == "/api/calendar/reminders") {
-            if (req.method == "GET")
-                return settings.reminders();
-            if (req.method == "PUT") {
-                settings.saveReminders(body(req).get<ReminderSettings>());
-                return nullptr;
-            }
-        }
-        if (req.method != "GET") {
-            if (req.method == "POST")
-                calendar.create(body(req).get<CalendarEvent>());
-            else if (req.method == "PUT")
-                calendar.update(suffix(req.path, "/api/calendar/events"), body(req).get<CalendarEvent>());
-            else if (req.method == "DELETE")
-                calendar.remove(suffix(req.path, "/api/calendar/events"));
-            else
-                throw ApiError(405, "Unsupported calendar operation.");
+            if (req.method == "GET") return settings.reminders();
+            settings.saveReminders(body(req).get<ReminderSettings>());
             return nullptr;
         }
-        auto upcoming = calendar.upcoming(now);
-        if (req.path == "/api/calendar/summary") {
-            MoneyCents total = 0;
-            int count = 0;
-            for (const auto &item : upcoming)
-                if (item.daysAway <= 30) {
-                    total = addMoney(total, item.event.amountCents);
-                    count++;
-                }
-            Json next = nullptr;
-            if (!upcoming.empty()) {
-                const auto &e = upcoming.front().event;
-                next = {{"label", e.title}, {"date", e.date}, {"amountCents", e.amountCents}};
-            }
-            return {{"upcomingCount", count},
-                    {"upcomingTotalCents", total},
-                    {"windowDays", 30},
-                    {"nextPayment", next}};
+        if (req.method != "GET") {
+            if (req.method == "POST") {
+                auto value = body(req).get<CalendarEvent>();
+                require(!value.paid, "Create the event first, then record its payment.");
+                calendar.create(value);
+            } else if (req.method == "PUT") {
+                auto id = suffix(req.path, "/api/calendar/events");
+                auto value = body(req).get<CalendarEvent>();
+                auto old = eventRepository.find(id);
+                if (!old) throw ApiError(404, "Calendar event not found.");
+                require(value.paid == old->paid, "Use Record payment to change payment status.");
+                calendar.update(id, value);
+            } else if (req.method == "DELETE") calendar.remove(suffix(req.path, "/api/calendar/events"));
+            return nullptr;
         }
-        if (req.path == "/api/calendar/upcoming") {
-            Json result = Json::array();
-            for (const auto &item : upcoming) {
-                Json event = item.event;
-                event["shortTitle"] = item.event.title;
-                result.push_back({{"event", event}, {"daysAway", item.daysAway}, {"isUrgent", item.urgent}});
-                if (result.size() == 4)
-                    break;
+        if (req.path == "/api/calendar/upcoming") return planner().outstanding(now);
+        if (req.path == "/api/calendar/summary") {
+            MoneyCents total = 0, overdueTotal = 0;
+            int count = 0, overdueCount = 0;
+            Json next = nullptr;
+            for (const auto &item : planner().outstanding(now)) {
+                auto days = item["daysAway"].get<int>();
+                auto amount = item["event"]["amountCents"].get<MoneyCents>();
+                if (days < 0) { overdueTotal = addMoney(overdueTotal, amount); overdueCount++; }
+                else {
+                    if (days <= 30) { total = addMoney(total, amount); count++; }
+                    if (next.is_null()) next = {{"label", item["event"]["title"]},
+                        {"date", item["event"]["date"]}, {"amountCents", amount}};
+                }
             }
-            return result;
+            return {{"upcomingCount", count}, {"upcomingTotalCents", total}, {"windowDays", 30},
+                    {"overdueCount", overdueCount}, {"overdueTotalCents", overdueTotal}, {"nextPayment", next}};
         }
         auto selected = param(req, "month", now.str());
-        if (selected.size() == 7)
-            selected += "-01";
-        auto start = Date(selected).startOfMonth();
-        Json rows = Json::array();
-        for (const auto &event : calendar.list(DateRange{start, start.startOfMonth(1)})) {
-            Json row = event;
-            row["shortTitle"] = event.title;
-            rows.push_back(row);
-        }
-        return {{"month", start}, {"today", now}, {"events", rows}};
+        if (selected.size() == 7) selected += "-01";
+        auto anchor = Date(selected);
+        auto view = param(req, "view", "month");
+        require(view == "month" || view == "week", "Invalid calendar view.");
+        bool monday = settings.display().weekStart == "monday";
+        auto weekStart = [monday](Date d) { return monday ? d.startOfWeek() : d.addDays(1).startOfWeek().addDays(-1); };
+        auto start = view == "week" ? weekStart(anchor) : anchor.startOfMonth();
+        auto end = view == "week" ? start.addDays(7) : start.startOfMonth(1);
+        return {{"month", anchor.startOfMonth()}, {"anchor", anchor}, {"today", now}, {"view", view},
+                {"rangeStart", start}, {"rangeEnd", end}, {"weekStart", monday ? "monday" : "sunday"},
+                {"events", planner().rows({start, end})}};
     }
     Json recurringRoute(const httplib::Request &req) {
         if (req.path == "/api/recurring/sync" && req.method == "POST")
@@ -467,7 +463,7 @@ class ApiController {
           budgetRepository(db), goalRepository(db), eventRepository(db), recurringRepository(db),
           bursaryRepository(db), feeRepository(db), profileRepository(db), settingsRepository(db),
           categories(categoryRepository), transactions(transactionRepository, categories),
-          budgets(budgetRepository, categories), goals(goalRepository), calendar(eventRepository),
+          budgets(budgetRepository, categories), goals(goalRepository), calendar(eventRepository, &transactionRepository),
           recurrence(recurringRepository, transactionRepository, categories),
           students(bursaryRepository, feeRepository, settingsRepository), profiles(profileRepository),
           settings(settingsRepository) {}
@@ -485,6 +481,7 @@ class ApiController {
             {std::regex(R"(/api/goals/.+)"), "PUT DELETE"},
             {std::regex(R"(/api/calendar/(summary|upcoming))"), "GET"},
             {std::regex(R"(/api/calendar/reminders)"), "GET PUT"},
+            {std::regex(R"(/api/calendar/pay)"), "POST"},
             {std::regex(R"(/api/calendar/events)"), "GET POST"},
             {std::regex(R"(/api/calendar/events/.+)"), "PUT DELETE"},
             {std::regex(R"(/api/recurring/sync)"), "POST"},
@@ -533,9 +530,12 @@ class ApiController {
             return dashboardRoute(req);
         if (req.path.rfind("/api/forecast", 0) == 0)
             return forecastRoute(req);
-        if (req.path == "/api/notifications")
-            return notifications.list(now, calendar.upcoming(now), budgets.summaries(ledger(), now),
-                                      settings.reminders(), settings.notifications());
+        if (req.path == "/api/notifications") {
+            std::vector<UpcomingEvent> pending;
+            for (const auto &item : planner().outstanding(now))
+                pending.push_back({item["event"].get<CalendarEvent>(), item["daysAway"].get<int>(), item["isUrgent"].get<bool>()});
+            return notifications.list(now, pending, budgets.summaries(ledger(), now), settings.reminders(), settings.notifications());
+        }
         if (req.path == "/api/app/today") {
             std::ostringstream out;
             auto tm = utcParts(dateTime(now.str()));
