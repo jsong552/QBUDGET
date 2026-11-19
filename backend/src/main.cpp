@@ -3,6 +3,7 @@
 #include "api_controller.hpp"
 #include "auth_service.hpp"
 #include "firestore_client.hpp"
+#include "request_date.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -30,7 +31,7 @@ int main() {
         if (req.get_header_value("Origin") == origin) {
             res.set_header("Access-Control-Allow-Origin", origin);
             res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-            res.set_header("Access-Control-Allow-Headers", "Authorization, Content-Type");
+            res.set_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Timezone-Offset");
         }
     });
     server.Options(R"(/api/.*)", [](const httplib::Request &, httplib::Response &res) { res.status = 204; });
@@ -44,8 +45,9 @@ int main() {
     const auto api = [](const httplib::Request &req, httplib::Response &res) {
         try {
             auto identity = qbudget::AuthService{}.authenticate(req.get_header_value("Authorization"));
+            auto today = qbudget::requestDate(req);
             qbudget::FirestoreClient database(identity);
-            auto result = qbudget::ApiController(database, identity).handle(req);
+            auto result = qbudget::ApiController(database, identity, today).handle(req);
             res.set_header("Cache-Control", "no-store");
             if (result.is_null())
                 res.status = 204;
