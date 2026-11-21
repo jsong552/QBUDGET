@@ -41,6 +41,7 @@ class StudentService {
         return settings.load<SemesterPlan>("semester", defaults);
     }
     void savePlan(const SemesterPlan &value) const {
+        validateRecord(value);
         settings.save("semester", value);
     }
     SemesterSummary summary(Date now, const std::vector<CalendarEvent> &events) const {
