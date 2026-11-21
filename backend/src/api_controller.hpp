@@ -282,6 +282,8 @@ class ApiController {
         return nullptr;
     }
     Json studentRoute(const httplib::Request &req) {
+        if (req.path == "/api/semester/rates")
+            return tuitionRatesJson();
         if (req.path == "/api/semester") {
             if (req.method == "GET")
                 return {{"summary", students.summary(now, calendar.list())},
@@ -491,6 +493,7 @@ class ApiController {
             {std::regex(R"(/api/recurring)"), "GET POST"},
             {std::regex(R"(/api/recurring/.+)"), "PUT DELETE"},
             {std::regex(R"(/api/semester)"), "GET PUT"},
+            {std::regex(R"(/api/semester/rates)"), "GET"},
             {std::regex(R"(/api/(bursaries|fees))"), "GET POST"},
             {std::regex(R"(/api/(bursaries|fees)/.+)"), "PUT DELETE"},
             {std::regex(R"(/api/me)"), "GET PUT POST"},
@@ -522,7 +525,7 @@ class ApiController {
             return calendarRoute(req);
         if (req.path.rfind("/api/recurring", 0) == 0)
             return recurringRoute(req);
-        if (req.path == "/api/semester" || req.path.rfind("/api/bursaries", 0) == 0 ||
+        if (req.path.rfind("/api/semester", 0) == 0 || req.path.rfind("/api/bursaries", 0) == 0 ||
             req.path.rfind("/api/fees", 0) == 0)
             return studentRoute(req);
         if (req.path.rfind("/api/me", 0) == 0)

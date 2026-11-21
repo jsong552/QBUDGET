@@ -1,6 +1,8 @@
-// Semester planning, bursary status and opt-out fees. Tuition rates are user-supplied estimates.
+// Semester planning, bursary status and opt-out fees. Tuition is an estimate: the student's own per-course
+// rate, or a hard-coded Queen's rate chosen from their faculty and residency when they have not entered one.
 #pragma once
 #include "calendar_service.hpp"
+#include "tuition_rates.hpp"
 namespace qbudget {
 class StudentService {
     BursaryRepository &bursaries;
@@ -41,6 +43,7 @@ class StudentService {
         return settings.load<SemesterPlan>("semester", defaults);
     }
     void savePlan(const SemesterPlan &value) const {
+        validateRecord(value);
         settings.save("semester", value);
     }
     SemesterSummary summary(Date now, const std::vector<CalendarEvent> &events) const {
@@ -60,10 +63,18 @@ class StudentService {
         for (const auto &event : events)
             if (!event.paid && range.contains(event.date) && event.kind != "tuition")
                 scheduled = addMoney(scheduled, event.amountCents);
-        auto tuition = addMoney(value.tuitionPerCourseCents * value.courseCount, value.additionalFeesCents);
+        // A rate the student entered always wins; the built-in estimate only fills in when it is left at 0.
+        MoneyCents rate = value.tuitionPerCourseCents;
+        std::string source = rate > 0 ? "entered" : "none";
+        if (rate == 0)
+            if (auto estimate = estimateTuition(value.faculty, value.studentStatus)) {
+                rate = estimate->perCourseCents;
+                source = "estimate";
+            }
+        auto tuition = addMoney(rate * value.courseCount, value.additionalFeesCents);
         auto costs = addMoney(addMoney(tuition, scheduled), kept);
         auto income = addMoney(value.expectedIncomeCents, approved);
-        return {value, tuition, scheduled, income, costs, income - costs, saved};
+        return {value, tuition, scheduled, income, costs, income - costs, saved, rate, source};
     }
 };
 } // namespace qbudget

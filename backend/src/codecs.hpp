@@ -291,6 +291,8 @@ inline void to_json(Json &j, const SemesterSummary &v) {
          {"expectedIncomeCents", v.expectedIncomeCents},
          {"plannedCostsCents", v.plannedCostsCents},
          {"remainingCents", v.remainingCents},
-         {"optedOutSavingsCents", v.optedOutSavingsCents}};
+         {"optedOutSavingsCents", v.optedOutSavingsCents},
+         {"tuitionPerCourseCents", v.tuitionPerCourseCents},
+         {"tuitionRateSource", v.tuitionRateSource}};
 }
 } // namespace qbudget
