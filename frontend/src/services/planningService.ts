@@ -1,6 +1,6 @@
 // HTTP adapter only; all planning calculations are implemented in C++.
 import { apiClient } from '../lib/apiClient'
-import type { BudgetData, CategoryBudget, RecurringEntry, SemesterData, SemesterPlan, Bursary, StudentFee } from '../types/planning'
+import type { BudgetData, CategoryBudget, RecurringEntry, SemesterData, SemesterPlan, Bursary, StudentFee, TuitionRates } from '../types/planning'
 export const getBudgets = () => apiClient.get<BudgetData>('/budgets')
 export const saveBudget = (value: Omit<CategoryBudget, 'id'>) => apiClient.put<void>('/budgets', value)
 export const deleteBudget = (id: string) => apiClient.delete<void>(`/budgets/${encodeURIComponent(id)}`)
@@ -16,6 +16,8 @@ export async function saveRecurring(id: string | null, value: Omit<RecurringEntr
 export const deleteRecurring = (id: string) => apiClient.delete<void>(`/recurring/${encodeURIComponent(id)}`)
 export const getSemester = () => apiClient.get<SemesterData>('/semester')
 export const saveSemester = (value: SemesterPlan) => apiClient.put<void>('/semester', value)
+/** Programs, residencies and per-unit tuition the backend uses to estimate tuition. */
+export const getTuitionRates = () => apiClient.get<TuitionRates>('/semester/rates')
 export const saveBursary = (id: string | null, value: Omit<Bursary, 'id'>) => id ? apiClient.put<void>(`/bursaries/${encodeURIComponent(id)}`, value) : apiClient.post<void>('/bursaries', value)
 export const deleteBursary = (id: string) => apiClient.delete<void>(`/bursaries/${encodeURIComponent(id)}`)
 export const saveFee = (id: string | null, value: Omit<StudentFee, 'id'>) => id ? apiClient.put<void>(`/fees/${encodeURIComponent(id)}`, value) : apiClient.post<void>('/fees', value)
