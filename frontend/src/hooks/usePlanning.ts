@@ -3,6 +3,7 @@ import { useCallback } from 'react'
 import * as service from '../services/planningService'
 import { useAsync } from './useAsync'
 import { useMutation } from './useMutation'
+import { isNotFound } from '../lib/errors'
 import { useReloadOnGeneratedTransactions } from './useReloadOnGeneratedTransactions'
 import type { CategoryBudget, RecurringEntry, SemesterPlan, Bursary, StudentFee } from '../types/planning'
 export function useBudgets() {
@@ -14,13 +15,23 @@ export function useBudgets() {
     save: (value: Omit<CategoryBudget, 'id'>) => write(() => service.saveBudget(value)), remove: (id: string) => write(() => service.deleteBudget(id)),
     addCategory: (name: string) => write(() => service.addCategory(name)), removeCategory: (id: string) => write(() => service.deleteCategory(id)) }
 }
+/** Optional per-call callbacks for recurring writes. */
+export interface RecurringWriteOptions {
+  /** Runs when the entry no longer exists (HTTP 404). The list is reloaded first. */
+  onNotFound?: () => void
+}
 export function useRecurring() {
   const resource = useAsync(service.getRecurring)
   const categories = useAsync(service.getBudgets)
   const { run, error: mutationError, clearError: clearMutationError } = useMutation()
-  const write = useCallback((action: () => Promise<unknown>) => run(action, { onSuccess: resource.reload }), [run, resource.reload])
+  const reload = resource.reload
+  const write = useCallback((action: () => Promise<unknown>, options: RecurringWriteOptions = {}) => run(action, {
+    onSuccess: reload,
+    onFailure: (failure) => { if (isNotFound(failure)) { reload(); options.onNotFound?.() } },
+  }), [run, reload])
   return { data: resource.data, categories: categories.data?.categories ?? [], error: resource.error ?? categories.error ?? mutationError, mutationError, clearMutationError,
-    save: (id: string | null, value: Omit<RecurringEntry, 'id'>) => write(() => service.saveRecurring(id, value)), remove: (id: string) => write(() => service.deleteRecurring(id)),
+    save: (id: string | null, value: Omit<RecurringEntry, 'id'>, options?: RecurringWriteOptions) => write(() => service.saveRecurring(id, value), options),
+    remove: (id: string, options?: RecurringWriteOptions) => write(() => service.deleteRecurring(id), options),
     /** Generates due entries. Resolves to how many were created, or null if the request failed. */
     sync: async () => {
       let created = 0
