@@ -4,10 +4,12 @@ import { createGoal, removeGoal, updateGoal } from '../services/goalService'
 import type { BudgetGoalInput, ForecastGranularity } from '../types'
 import { useAsync } from './useAsync'
 import { useMutation } from './useMutation'
+import { useReloadOnGeneratedTransactions } from './useReloadOnGeneratedTransactions'
 
 export function useForecast(granularity: ForecastGranularity) {
   const load = useCallback(() => getForecast(granularity), [granularity])
   const resource = useAsync(load)
+  useReloadOnGeneratedTransactions(resource.reload)
   const { run, error: mutationError, clearError: clearMutationError } = useMutation()
 
   const reloadGoals = resource.reload

@@ -8,12 +8,14 @@ import {
 import type { TransactionFilters, TransactionInput } from '../types'
 import { useAsync } from './useAsync'
 import { useMutation } from './useMutation'
+import { useReloadOnGeneratedTransactions } from './useReloadOnGeneratedTransactions'
 
 export function useTransactions(filters: TransactionFilters) {
   const loadView = useCallback(() => getTransactionView(filters), [filters])
   const view = useAsync(loadView)
   const { run, error: mutationError, clearError: clearMutationError } = useMutation()
   const reloadAfterChange = view.reload
+  useReloadOnGeneratedTransactions(view.reload)
 
   const addTransaction = useCallback(
     (input: TransactionInput) => run(() => createTransaction(input), { onSuccess: reloadAfterChange }),

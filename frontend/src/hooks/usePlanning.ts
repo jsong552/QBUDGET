@@ -3,9 +3,11 @@ import { useCallback } from 'react'
 import * as service from '../services/planningService'
 import { useAsync } from './useAsync'
 import { useMutation } from './useMutation'
+import { useReloadOnGeneratedTransactions } from './useReloadOnGeneratedTransactions'
 import type { CategoryBudget, RecurringEntry, SemesterPlan, Bursary, StudentFee } from '../types/planning'
 export function useBudgets() {
   const resource = useAsync(service.getBudgets)
+  useReloadOnGeneratedTransactions(resource.reload)
   const { run, error: mutationError, clearError: clearMutationError } = useMutation()
   const write = useCallback((action: () => Promise<unknown>) => run(action, { onSuccess: resource.reload }), [run, resource.reload])
   return { data: resource.data, error: resource.error ?? mutationError, mutationError, clearMutationError,
