@@ -54,6 +54,7 @@ export function formatDate(date: IsoDate, style: DateStyle = 'medium'): string {
 }
 
 export function formatDaysAway(days: number): string {
+  if (days < 0) return `${Math.abs(days)} ${days === -1 ? 'day' : 'days'} overdue`
   if (days === 0) return 'Today'
   return days === 1 ? '1 day away' : `${days} days away`
 }
