@@ -1,5 +1,6 @@
 import { ChevronDown, type LucideIcon } from 'lucide-react'
 import { useId, type ChangeEvent } from 'react'
+import { fieldFocusRing } from './focus'
 
 export interface SelectOption<T extends string> {
   value: T
@@ -43,7 +44,7 @@ export function Select<T extends string>({ label, value, options, onChange, icon
           required={required}
           value={value}
           onChange={onSelectChange}
-          className={`h-11 w-full appearance-none rounded-lg border border-line-strong bg-surface pr-10 text-[15px] text-ink outline-none focus:border-primary disabled:bg-surface-disabled disabled:text-muted ${
+          className={`h-11 w-full appearance-none rounded-lg border border-line-strong bg-surface pr-10 text-[15px] text-ink ${fieldFocusRing} disabled:bg-surface-disabled disabled:text-muted ${
             Icon ? 'pl-11' : 'pl-4'
           }`}
         >

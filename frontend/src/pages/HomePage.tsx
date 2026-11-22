@@ -119,7 +119,6 @@ export function HomePage() {
 
   return (
     <div>
-      <DataError error={error} />
       <PageHeader
         title={
           summary && (
@@ -130,6 +129,7 @@ export function HomePage() {
         }
         subtitle="Here's how your semester budget is looking."
       />
+      <DataError error={error} />
 
       {summary && (
         <div className="mt-6 grid grid-cols-[1.7fr_1fr_1fr] gap-4">
@@ -156,7 +156,7 @@ export function HomePage() {
           <CardHeader
             eyebrow="Overview"
             title="Spending activity"
-            action={<SegmentedControl options={rangeOptions} value={range} onChange={onRangeChange} size="sm" />}
+            action={<SegmentedControl label="Activity range" options={rangeOptions} value={range} onChange={onRangeChange} size="sm" />}
           />
           <div className="mt-4">{activity && <SpendingActivityChart activity={activity} />}</div>
         </Card>

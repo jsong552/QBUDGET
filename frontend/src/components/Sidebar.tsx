@@ -1,5 +1,6 @@
-import { BarChart3, CalendarDays, CreditCard, House, Settings, type LucideIcon } from 'lucide-react'
+import { BarChart3, CalendarDays, CreditCard, GraduationCap, House, PiggyBank, Repeat, Settings, type LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router'
+import { sidebarFocusRing } from './focus'
 import { Logo } from './Logo'
 
 interface NavItem {
@@ -11,17 +12,17 @@ interface NavItem {
 const mainNav: NavItem[] = [
   { to: '/', label: 'Home', icon: House },
   { to: '/expenses', label: 'Expenses', icon: CreditCard },
-  { to: '/budgets', label: 'Budgets', icon: CreditCard },
-  { to: '/recurring', label: 'Recurring', icon: CalendarDays },
-  { to: '/semester', label: 'Semester', icon: BarChart3 },
+  { to: '/budgets', label: 'Budgets', icon: PiggyBank },
+  { to: '/recurring', label: 'Recurring', icon: Repeat },
   { to: '/forecast', label: 'Forecast', icon: BarChart3 },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { to: '/semester', label: 'Semester', icon: GraduationCap },
 ]
 
 const settingsNav: NavItem = { to: '/settings', label: 'Settings', icon: Settings }
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
-  const base = 'flex items-center gap-3.5 rounded-xl border-l-[3px] px-4 py-3 text-[15px] font-medium transition-colors'
+  const base = `flex items-center gap-3.5 rounded-xl border-l-[3px] px-4 py-3 text-[15px] font-medium transition-colors ${sidebarFocusRing}`
   return isActive
     ? `${base} border-accent bg-sidebar-active text-on-sidebar`
     : `${base} border-transparent text-on-sidebar hover:bg-sidebar-raised/50`

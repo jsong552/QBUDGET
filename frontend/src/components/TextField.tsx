@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { useId, type ChangeEvent } from 'react'
+import { fieldFocusRing } from './focus'
 
 interface TextFieldProps {
   label?: string
@@ -70,7 +71,7 @@ export function TextField({
           min={min}
           step={step}
           maxLength={maxLength}
-          className={`${size === 'lg' ? 'h-12' : 'h-11'} w-full rounded-lg border border-line-strong bg-surface pr-4 text-[15px] text-ink outline-none placeholder:text-subtle focus:border-primary disabled:bg-surface-disabled disabled:text-muted ${
+          className={`${size === 'lg' ? 'h-12' : 'h-11'} w-full rounded-lg border border-line-strong bg-surface pr-4 text-[15px] text-ink placeholder:text-subtle ${fieldFocusRing} disabled:bg-surface-disabled disabled:text-muted ${
             Icon ? 'pl-12' : 'pl-4'
           }`}
         />

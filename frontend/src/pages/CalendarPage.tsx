@@ -232,7 +232,6 @@ export function CalendarPage() {
 
   return (
     <div>
-      <DataError error={pageError(error, mutationError, editing !== undefined)} />
       {editing !== undefined && (
         <RecordForm
           title={editing ? 'Edit scheduled payment' : 'Schedule a payment'}
@@ -256,6 +255,7 @@ export function CalendarPage() {
         title="Calendar"
         subtitle="Keep track of your upcoming payments and important financial dates."
       />
+      <DataError error={pageError(error, mutationError, editing !== undefined)} />
 
       {summary && (
         <div className="mt-5 grid grid-cols-3 gap-5">
@@ -299,7 +299,7 @@ export function CalendarPage() {
                   </button>
                 </div>
                 <div className="ml-auto flex items-center gap-4">
-                  <SegmentedControl options={viewOptions} value={view} onChange={onViewChange} />
+                  <SegmentedControl label="Calendar view" options={viewOptions} value={view} onChange={onViewChange} />
                   <Button icon={Plus} onClick={onCreateEvent} className="px-5">
                     Create event
                   </Button>

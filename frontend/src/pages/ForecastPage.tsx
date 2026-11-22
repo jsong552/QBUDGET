@@ -163,7 +163,6 @@ export function ForecastPage() {
 
   return (
     <div>
-      <DataError error={pageError(error, mutationError, editing !== undefined)} />
       {editing !== undefined && (
         <RecordForm
           title={editing ? 'Edit budget goal' : 'Add budget goal'}
@@ -180,6 +179,7 @@ export function ForecastPage() {
         title="Forecast"
         subtitle="View your spending trends, set goals, and see a prediction of your budget."
       />
+      <DataError error={pageError(error, mutationError, editing !== undefined)} />
 
       {summary && (
         <div className="mt-5 grid grid-cols-3 gap-5">
@@ -194,7 +194,7 @@ export function ForecastPage() {
           <CardHeader
             title="Spending forecast"
             subtitle="Compare your income and expenses over time."
-            action={<SegmentedControl options={granularityOptions} value={granularity} onChange={onGranularityChange} />}
+            action={<SegmentedControl label="Forecast interval" options={granularityOptions} value={granularity} onChange={onGranularityChange} />}
           />
           <div className="mt-2">{series && <ForecastChart series={series} />}</div>
         </Card>
