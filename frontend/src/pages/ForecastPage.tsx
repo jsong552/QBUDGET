@@ -1,4 +1,5 @@
-import { RecordForm } from '../components/RecordForm'
+import { RecordForm, type RecordField } from '../components/RecordForm'
+import { pageError } from '../lib/errors'
 import { amountToCents } from '../lib/moneyInput'
 import { DataError } from '../components/DataError'
 import { ArrowDown, EllipsisVertical, GraduationCap, House, Plus, Target, TrendingUp, Wallet, type LucideIcon } from 'lucide-react'
@@ -36,6 +37,12 @@ const goalStyles: Partial<Record<GoalKind, GoalStyle>> = {
 }
 
 /** Neutral style for goal kinds the UI has no entry for. */
+const goalFields: RecordField[] = [
+  { name: 'title', label: 'Title' },
+  { name: 'kind', label: 'Goal type', options: [{ value: 'savings', label: 'Savings (overall balance)' }, { value: 'spending_limit', label: 'Monthly spending limit' }], half: true },
+  { name: 'amount', label: 'Target (CAD)', type: 'number', half: true },
+]
+
 const fallbackGoalStyle: GoalStyle = { icon: Target, iconTone: 'quiet', barTone: 'quiet' }
 
 
@@ -124,26 +131,51 @@ function BreakdownTable({ breakdown }: { breakdown: MonthlyBreakdown }) {
 export function ForecastPage() {
   const [granularity, setGranularity] = useState<ForecastGranularity>('monthly')
   const [editing, setEditing] = useState<BudgetGoal | null | undefined>(undefined)
-  const { summary, series, categories, breakdown, goals, error, addGoal, editGoal, deleteGoal } = useForecast(granularity)
+  const { summary, series, categories, breakdown, goals, error, mutationError, clearMutationError, addGoal, editGoal, deleteGoal } = useForecast(granularity)
 
   function onGranularityChange(next: ForecastGranularity) {
     setGranularity(next)
   }
 
   function onAddGoal() {
+    clearMutationError()
     setEditing(null)
   }
 
   function onOpenGoalMenu(goal: BudgetGoal) {
+    clearMutationError()
     setEditing(goal)
+  }
+
+  function onCloseGoalForm() {
+    clearMutationError()
+    setEditing(undefined)
+  }
+
+  function onSaveGoal(values: Record<string, string>) {
+    const input = { title: values.title, kind: values.kind, targetCents: amountToCents(values.amount) }
+    return editing ? editGoal(editing.id, input) : addGoal(input)
+  }
+
+  function onDeleteGoal() {
+    return editing ? deleteGoal(editing.id) : Promise.resolve(false)
   }
 
   return (
     <div>
-      <DataError error={error} />
-      {editing !== undefined && <RecordForm title={editing ? 'Edit budget goal' : 'Add budget goal'} initial={{ title: editing?.title ?? '', kind: editing?.kind ?? 'savings', amount: editing ? (editing.targetCents / 100).toFixed(2) : '' }} fields={[
-        { name: 'title', label: 'Title' }, { name: 'kind', label: 'Goal type', options: [{ value: 'savings', label: 'Savings (overall balance)' }, { value: 'spending_limit', label: 'Monthly spending limit' }] }, { name: 'amount', label: 'Target (CAD)', type: 'number' },
-      ]} onClose={() => setEditing(undefined)} onDelete={editing ? () => deleteGoal(editing.id) : undefined} onSave={(v) => { const input = { title: v.title, kind: v.kind, targetCents: amountToCents(v.amount) }; return editing ? editGoal(editing.id, input) : addGoal(input) }} />}
+      <DataError error={pageError(error, mutationError, editing !== undefined)} />
+      {editing !== undefined && (
+        <RecordForm
+          title={editing ? 'Edit budget goal' : 'Add budget goal'}
+          initial={{ title: editing?.title ?? '', kind: editing?.kind ?? 'savings', amount: editing ? (editing.targetCents / 100).toFixed(2) : '' }}
+          fields={goalFields}
+          error={mutationError}
+          deleteMessage={editing ? `"${editing.title}" will be removed. This cannot be undone.` : undefined}
+          onClose={onCloseGoalForm}
+          onSave={onSaveGoal}
+          onDelete={editing ? onDeleteGoal : undefined}
+        />
+      )}
       <PageHeader
         title="Forecast"
         subtitle="View your spending trends, set goals, and see a prediction of your budget."

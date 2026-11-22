@@ -1,4 +1,5 @@
-import { RecordForm } from '../components/RecordForm'
+import { RecordForm, type RecordField } from '../components/RecordForm'
+import { pageError } from '../lib/errors'
 import { amountToCents } from '../lib/moneyInput'
 import { DataError } from '../components/DataError'
 import {
@@ -28,7 +29,7 @@ import { Toggle } from '../components/Toggle'
 import { toneClasses, type Tone } from '../components/tones'
 import { useCalendar } from '../hooks/useCalendar'
 import { buildMonthGrid, shiftMonth, weekdayLabels, type CalendarDay } from '../lib/calendar'
-import { formatDate, formatDaysAway, formatMoney } from '../lib/format'
+import { formatDate, formatDaysAway, formatLabel, formatMoney, localTodayIso } from '../lib/format'
 import type { CalendarEvent, CalendarMonth, CalendarView, EventKind, IsoDate, ReminderLeadTime, UpcomingEvent } from '../types'
 
 interface EventStyle {
@@ -162,11 +163,22 @@ function UpcomingEventRow({ upcoming }: { upcoming: UpcomingEvent }) {
   )
 }
 
+const eventKinds = ['rent', 'credit_card', 'tuition', 'utilities', 'textbook', 'other']
+
+const eventFields: RecordField[] = [
+  { name: 'title', label: 'Title' },
+  { name: 'date', label: 'Due date', type: 'date', half: true },
+  { name: 'amount', label: 'Amount (CAD)', type: 'number', half: true },
+  { name: 'kind', label: 'Kind', options: eventKinds.map((value) => ({ value, label: formatLabel(value) })) },
+  { name: 'reminder', label: 'In-app reminder', options: [{ value: 'true', label: 'Enabled' }, { value: 'false', label: 'Disabled' }] },
+  { name: 'paid', label: 'Payment status', options: [{ value: 'false', label: 'Unpaid' }, { value: 'true', label: 'Paid (record actual expense separately)' }] },
+]
+
 export function CalendarPage() {
   const [requestedMonth, setRequestedMonth] = useState<IsoDate | null>(null)
   const [view, setView] = useState<CalendarView>('month')
   const [editing, setEditing] = useState<CalendarEvent | null | undefined>()
-  const { summary, calendarMonth, upcoming, reminders, error, addEvent, editEvent, deleteEvent, changeReminders } = useCalendar(requestedMonth, view)
+  const { summary, calendarMonth, upcoming, reminders, error, mutationError, clearMutationError, addEvent, editEvent, deleteEvent, changeReminders } = useCalendar(requestedMonth, view)
 
   function onPreviousMonth() {
     if (calendarMonth) setRequestedMonth(shiftMonth(calendarMonth.month, -1))
@@ -181,7 +193,29 @@ export function CalendarPage() {
   }
 
   function onCreateEvent() {
+    clearMutationError()
     setEditing(null)
+  }
+
+  function onCloseEventForm() {
+    clearMutationError()
+    setEditing(undefined)
+  }
+
+  function onSaveEvent(values: Record<string, string>) {
+    const input = {
+      title: values.title,
+      date: values.date,
+      kind: values.kind,
+      amountCents: amountToCents(values.amount),
+      hasReminder: values.reminder === 'true',
+      paid: values.paid === 'true',
+    }
+    return editing ? editEvent(editing.id, input) : addEvent(input)
+  }
+
+  function onDeleteEvent() {
+    return editing ? deleteEvent(editing.id) : Promise.resolve(false)
   }
 
   function onViewAllEvents() {
@@ -198,12 +232,26 @@ export function CalendarPage() {
 
   return (
     <div>
-      <DataError error={error} />
-      {editing !== undefined && <RecordForm title={editing ? 'Edit scheduled payment' : 'Schedule a payment'} initial={{ title: editing?.title ?? '', date: editing?.date ?? new Date().toISOString().slice(0, 10), kind: editing?.kind ?? 'rent', amount: editing ? (editing.amountCents / 100).toFixed(2) : '', reminder: editing?.hasReminder === false ? 'false' : 'true', paid: editing?.paid ? 'true' : 'false' }} fields={[
-        { name: 'title', label: 'Title' }, { name: 'date', label: 'Due date', type: 'date' }, { name: 'kind', label: 'Kind', options: ['rent', 'credit_card', 'tuition', 'utilities', 'textbook', 'other'].map((value) => ({ value, label: value.replace('_', ' ') })) }, { name: 'amount', label: 'Amount (CAD)', type: 'number' },
-        { name: 'reminder', label: 'In-app reminder', options: [{ value: 'true', label: 'Enabled' }, { value: 'false', label: 'Disabled' }] },
-        { name: 'paid', label: 'Payment status', options: [{ value: 'false', label: 'Unpaid' }, { value: 'true', label: 'Paid (record actual expense separately)' }] },
-      ]} onClose={() => setEditing(undefined)} onDelete={editing ? () => deleteEvent(editing.id) : undefined} onSave={v => { const input = { title: v.title, date: v.date, kind: v.kind, amountCents: amountToCents(v.amount), hasReminder: v.reminder === 'true', paid: v.paid === 'true' }; return editing ? editEvent(editing.id, input) : addEvent(input) }} />}
+      <DataError error={pageError(error, mutationError, editing !== undefined)} />
+      {editing !== undefined && (
+        <RecordForm
+          title={editing ? 'Edit scheduled payment' : 'Schedule a payment'}
+          initial={{
+            title: editing?.title ?? '',
+            date: editing?.date ?? localTodayIso(),
+            kind: editing?.kind ?? 'rent',
+            amount: editing ? (editing.amountCents / 100).toFixed(2) : '',
+            reminder: editing?.hasReminder === false ? 'false' : 'true',
+            paid: editing?.paid ? 'true' : 'false',
+          }}
+          fields={eventFields}
+          error={mutationError}
+          deleteMessage={editing ? `"${editing.title}" will be removed from your calendar. Recorded transactions are kept.` : undefined}
+          onClose={onCloseEventForm}
+          onSave={onSaveEvent}
+          onDelete={editing ? onDeleteEvent : undefined}
+        />
+      )}
       <PageHeader
         title="Calendar"
         subtitle="Keep track of your upcoming payments and important financial dates."

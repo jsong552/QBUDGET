@@ -1,4 +1,6 @@
-import { RecordForm } from '../components/RecordForm'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { RecordForm, type RecordField } from '../components/RecordForm'
+import { pageError } from '../lib/errors'
 import { amountToCents } from '../lib/moneyInput'
 import { DataError } from '../components/DataError'
 import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronsUpDown, CirclePlus, Pencil, Search, Trash2, Wallet } from 'lucide-react'
@@ -12,7 +14,7 @@ import { StatCard } from '../components/StatCard'
 import { TextField } from '../components/TextField'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useTransactions } from '../hooks/useTransactions'
-import { formatDate, formatMoney, formatMoneyChange } from '../lib/format'
+import { formatDate, formatMoney, formatMoneyChange, localTodayIso } from '../lib/format'
 import type {
   Category,
   CategoryId,
@@ -71,7 +73,7 @@ function categoryOptions(categories: Category[]): SelectOption<CategoryId | 'all
 interface TransactionRowProps {
   transaction: Transaction
   onEditTransaction: (transaction: Transaction) => void
-  onDeleteTransaction: (transaction: Transaction) => Promise<boolean>
+  onDeleteTransaction: (transaction: Transaction) => void
 }
 
 function TransactionRow({ transaction, onEditTransaction, onDeleteTransaction }: TransactionRowProps) {
@@ -144,7 +146,8 @@ export function ExpensesPage() {
   const search = useDebouncedValue(searchText, searchDebounceMs)
   const filters = useMemo<TransactionFilters>(() => ({ ...filterChoices, search }), [filterChoices, search])
   const [editing, setEditing] = useState<Transaction | null | undefined>(undefined)
-  const { summary, transactions, categories, error, addTransaction, editTransaction, deleteTransaction } = useTransactions(filters)
+  const [deleting, setDeleting] = useState<Transaction | null>(null)
+  const { summary, transactions, categories, error, mutationError, clearMutationError, addTransaction, editTransaction, deleteTransaction } = useTransactions(filters)
   const editableCategories = editing && !categories?.some((c) => c.id === editing.category.id)
     ? [...(categories ?? []), editing.category] : (categories ?? [])
 
@@ -173,33 +176,90 @@ export function ExpensesPage() {
   }
 
   function onAddExpense() {
+    clearMutationError()
     setEditing(null)
   }
 
   function onEditTransaction(transaction: Transaction) {
+    clearMutationError()
     setEditing(transaction)
   }
 
-  function onDeleteTransaction(transaction: Transaction) {
-    return window.confirm(`Delete ${transaction.description}?`) ? deleteTransaction(transaction.id) : Promise.resolve(false)
+  function onCloseTransactionForm() {
+    clearMutationError()
+    setEditing(undefined)
   }
+
+  function onSaveTransaction(values: Record<string, string>) {
+    const type = values.type as 'income' | 'expense'
+    const input: TransactionInput = {
+      date: values.date,
+      description: values.description,
+      note: values.note,
+      categoryId: values.categoryId,
+      type,
+      amountCents: amountToCents(values.amount) * (type === 'expense' ? -1 : 1),
+    }
+    return editing ? editTransaction(editing.id, input) : addTransaction(input)
+  }
+
+  function onDeleteTransaction(transaction: Transaction) {
+    clearMutationError()
+    setDeleting(transaction)
+  }
+
+  function onConfirmDeleteTransaction() {
+    return deleting ? deleteTransaction(deleting.id) : false
+  }
+
+  function onCloseDeleteConfirm() {
+    clearMutationError()
+    setDeleting(null)
+  }
+
+  const transactionFields: RecordField[] = [
+    { name: 'date', label: 'Date', type: 'date', half: true },
+    { name: 'amount', label: 'Amount (CAD)', type: 'number', half: true },
+    { name: 'description', label: 'Description / income source' },
+    { name: 'type', label: 'Type', options: [{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }], half: true },
+    { name: 'categoryId', label: 'Category', options: editableCategories.map((c) => ({ value: c.id, label: c.name })), half: true },
+    { name: 'note', label: 'Note (optional)', required: false, maxLength: 1000 },
+  ]
 
   return (
     <div>
-      <DataError error={error} />
+      <DataError error={pageError(error, mutationError, editing !== undefined || deleting !== null)} />
       <PageHeader title="Expenses" subtitle="View, add and manage your income and expenses." />
 
-      {editing !== undefined && <RecordForm title={editing ? 'Edit transaction' : 'Add transaction'} initial={{
-        date: editing?.date ?? new Date().toISOString().slice(0, 10), description: editing?.description ?? '', note: editing?.note ?? '', categoryId: editing?.category.id ?? 'other', type: editing?.type ?? 'expense', amount: editing ? (Math.abs(editing.amountCents) / 100).toFixed(2) : '',
-      }} fields={[
-        { name: 'date', label: 'Date', type: 'date' }, { name: 'description', label: 'Description / income source' }, { name: 'note', label: 'Note (optional)', required: false },
-        { name: 'type', label: 'Type', options: [{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }] },
-        { name: 'categoryId', label: 'Category', options: editableCategories.map((c) => ({ value: c.id, label: c.name })) },
-        { name: 'amount', label: 'Amount (CAD)', type: 'number' },
-      ]} onClose={() => setEditing(undefined)} onSave={(values) => {
-        const input: TransactionInput = { date: values.date, description: values.description, note: values.note, categoryId: values.categoryId, type: values.type as 'income' | 'expense', amountCents: amountToCents(values.amount) * (values.type === 'expense' ? -1 : 1) }
-        return editing ? editTransaction(editing.id, input) : addTransaction(input)
-      }} />}
+      {editing !== undefined && (
+        <RecordForm
+          title={editing ? 'Edit transaction' : 'Add transaction'}
+          initial={{
+            date: editing?.date ?? localTodayIso(),
+            description: editing?.description ?? '',
+            note: editing?.note ?? '',
+            categoryId: editing?.category.id ?? 'other',
+            type: editing?.type ?? 'expense',
+            amount: editing ? (Math.abs(editing.amountCents) / 100).toFixed(2) : '',
+          }}
+          fields={transactionFields}
+          error={mutationError}
+          onClose={onCloseTransactionForm}
+          onSave={onSaveTransaction}
+        />
+      )}
+      {deleting && (
+        <ConfirmDialog
+          title="Delete transaction?"
+          message={`"${deleting.description}" will be removed from your history. This cannot be undone.`}
+          confirmLabel="Delete"
+          busyLabel="Deleting…"
+          variant="danger"
+          error={mutationError}
+          onConfirm={onConfirmDeleteTransaction}
+          onClose={onCloseDeleteConfirm}
+        />
+      )}
       {summary && (
         <div className="mt-6 grid grid-cols-3 gap-5">
           <StatCard

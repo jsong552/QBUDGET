@@ -241,15 +241,22 @@ interface ManagementRowProps {
   title: string
   description: string
   action: ReactNode
+  /** Inline confirmation shown under the description, e.g. after an email was sent. */
+  status?: string | null
 }
 
-function ManagementRow({ icon, tone, title, description, action }: ManagementRowProps) {
+function ManagementRow({ icon, tone, title, description, action, status }: ManagementRowProps) {
   return (
     <li className="flex items-center gap-4 px-3 py-2.5">
       <IconCircle icon={icon} tone={tone} size="sm" />
       <div className="flex-1">
         <p className="text-[15px] font-semibold text-ink">{title}</p>
         <p className="text-[13px] text-muted">{description}</p>
+        {status && (
+          <p role="status" className="mt-1 text-[13px] font-medium text-success">
+            {status}
+          </p>
+        )}
       </div>
       {action}
     </li>
@@ -269,8 +276,15 @@ export function SettingsPage() {
     return toggleNotification(key, enabled)
   }
 
-  function onChangePassword() {
-    void changePassword().then((ok) => { if (ok) window.alert('Password reset email sent. Check your inbox.') })
+  const [passwordStatus, setPasswordStatus] = useState<string | null>(null)
+  const [sendingPasswordReset, setSendingPasswordReset] = useState(false)
+
+  async function onChangePassword() {
+    setPasswordStatus(null)
+    setSendingPasswordReset(true)
+    const sent = await changePassword()
+    setSendingPasswordReset(false)
+    if (sent) setPasswordStatus(`Password reset email sent to ${profile.email}. Check your inbox.`)
   }
 
   function onDeleteAccount() {
@@ -307,9 +321,10 @@ export function SettingsPage() {
               tone="quiet"
               title="Change password"
               description="Update your password for better security."
+              status={passwordStatus}
               action={
-                <Button variant="outline" onClick={onChangePassword}>
-                  Change password
+                <Button variant="outline" disabled={sendingPasswordReset} onClick={onChangePassword}>
+                  {sendingPasswordReset ? 'Sending…' : 'Change password'}
                 </Button>
               }
             />
