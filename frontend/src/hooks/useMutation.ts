@@ -3,12 +3,13 @@ import { useCallback, useState } from 'react'
 interface MutationCallbacks<T> {
   /** Runs after a successful request, e.g. to reload affected data. */
   onSuccess?: (result: T) => void
-  /** Runs after a failed request, e.g. to roll back a change already shown on screen. */
-  onFailure?: () => void
+  /** Runs after a failed request, e.g. to roll back a change already shown on screen. Receives the error. */
+  onFailure?: (error: unknown) => void
 }
 
 /**
- * Runs write requests without ever rejecting. Failures are logged and exposed as `error`.
+ * Runs write requests without ever rejecting. Failures are logged and exposed as `error`
+ * (the error of the most recent failed call, until the next success or `clearError()`).
  * `run` resolves to true on success, false on failure.
  */
 export function useMutation() {
@@ -23,10 +24,12 @@ export function useMutation() {
     } catch (failure) {
       console.error('[data] request failed', failure)
       setError(failure)
-      onFailure?.()
+      onFailure?.(failure)
       return false
     }
   }, [])
 
-  return { run, error }
+  const clearError = useCallback(() => setError(null), [])
+
+  return { run, error, clearError }
 }

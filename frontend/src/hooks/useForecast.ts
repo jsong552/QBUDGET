@@ -8,7 +8,7 @@ import { useMutation } from './useMutation'
 export function useForecast(granularity: ForecastGranularity) {
   const load = useCallback(() => getForecast(granularity), [granularity])
   const resource = useAsync(load)
-  const { run, error: mutationError } = useMutation()
+  const { run, error: mutationError, clearError: clearMutationError } = useMutation()
 
   const reloadGoals = resource.reload
 
@@ -28,6 +28,8 @@ export function useForecast(granularity: ForecastGranularity) {
     breakdown: resource.data?.breakdown,
     goals: resource.data?.goals,
     error: resource.error ?? mutationError,
+    mutationError,
+    clearMutationError,
     addGoal,
     editGoal,
     deleteGoal,

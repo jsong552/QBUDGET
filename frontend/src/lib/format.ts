@@ -68,3 +68,15 @@ export function formatPercentChange(percent: number): string {
   if (percent === 0) return '0%'
   return `${percent > 0 ? '↑' : '↓'} ${Math.abs(percent)}%`
 }
+
+/** Human label for a stored value: "credit_card" -> "Credit card", "weekly" -> "Weekly". */
+export function formatLabel(value: string): string {
+  const words = value.replace(/[_-]+/g, ' ').trim().toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/** Today's date in the user's time zone as YYYY-MM-DD (toISOString would give the UTC date). */
+export function localTodayIso(): IsoDate {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}

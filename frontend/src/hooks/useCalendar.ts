@@ -21,7 +21,7 @@ export function useCalendar(month: IsoDate | null, view: CalendarView) {
   const calendarMonth = useAsync(loadMonth)
   const upcoming = useAsync(listUpcomingEvents)
   const reminders = useAsync(getReminderSettings)
-  const { run, error: mutationError } = useMutation()
+  const { run, error: mutationError, clearError: clearMutationError } = useMutation()
 
   const reloadSummary = summary.reload
   const reloadMonth = calendarMonth.reload
@@ -59,6 +59,8 @@ export function useCalendar(month: IsoDate | null, view: CalendarView) {
     upcoming: upcoming.data,
     reminders: reminders.data,
     error: summary.error ?? calendarMonth.error ?? upcoming.error ?? reminders.error ?? mutationError,
+    mutationError,
+    clearMutationError,
     addEvent,
     editEvent: (id: string, input: CalendarEventInput) => run(() => updateEvent(id, input), { onSuccess: reloadAfterChange }),
     deleteEvent: (id: string) => run(() => removeEvent(id), { onSuccess: reloadAfterChange }),

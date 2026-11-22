@@ -12,7 +12,7 @@ import { useMutation } from './useMutation'
 export function useTransactions(filters: TransactionFilters) {
   const loadView = useCallback(() => getTransactionView(filters), [filters])
   const view = useAsync(loadView)
-  const { run, error: mutationError } = useMutation()
+  const { run, error: mutationError, clearError: clearMutationError } = useMutation()
   const reloadAfterChange = view.reload
 
   const addTransaction = useCallback(
@@ -35,6 +35,8 @@ export function useTransactions(filters: TransactionFilters) {
     transactions: view.data?.transactions,
     categories: view.data?.categories,
     error: view.error ?? mutationError,
+    mutationError,
+    clearMutationError,
     addTransaction,
     editTransaction,
     deleteTransaction,
