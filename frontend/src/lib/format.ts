@@ -33,6 +33,7 @@ export type DateStyle =
   | 'month' // September
   | 'monthShort' // Sep
   | 'monthYear' // September 2024
+  | 'weekdayLong' // Tuesday, September 10
 
 const dateOptions: Record<DateStyle, Intl.DateTimeFormatOptions> = {
   medium: { month: 'short', day: 'numeric', year: 'numeric' },
@@ -41,6 +42,7 @@ const dateOptions: Record<DateStyle, Intl.DateTimeFormatOptions> = {
   month: { month: 'long' },
   monthShort: { month: 'short' },
   monthYear: { month: 'long', year: 'numeric' },
+  weekdayLong: { weekday: 'long', month: 'long', day: 'numeric' },
 }
 
 /** Parses a `YYYY-MM-DD` string as a calendar date (no time zone shift). */

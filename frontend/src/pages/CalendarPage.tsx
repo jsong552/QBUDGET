@@ -10,11 +10,14 @@ import { SegmentedControl } from '../components/SegmentedControl'
 import { Select } from '../components/Select'
 import { StatCard } from '../components/StatCard'
 import { Toggle } from '../components/Toggle'
+import { MonthGrid } from '../components/calendar/MonthGrid'
+import { WeekView } from '../components/calendar/WeekView'
+import { getEventStatus } from '../components/calendar/eventStyles'
 import { useCalendar } from '../hooks/useCalendar'
 import { buildMonthGrid, buildWeek, shiftDays, shiftMonth, weekdayLabels } from '../lib/calendar'
 import { pageError } from '../lib/errors'
 import { amountToCents } from '../lib/moneyInput'
-import { formatDate, formatDaysAway, formatMoney, localTodayIso } from '../lib/format'
+import { formatDate, formatDateRange, formatDaysAway, formatMoney, localTodayIso } from '../lib/format'
 import type { CalendarEvent, CalendarView, IsoDate, ReminderLeadTime } from '../types'
 
 const leadTimes: { value: ReminderLeadTime; label: string }[] = [
@@ -23,10 +26,7 @@ const leadTimes: { value: ReminderLeadTime; label: string }[] = [
 ]
 
 function status(event: CalendarEvent, today: string) {
-  if (event.skipped) return 'Skipped (transaction deleted)'
-  if (event.paid) return event.type === 'income' ? 'Received' : 'Paid'
-  if (event.date < today) return event.type === 'income' ? 'Not received' : 'Overdue'
-  return event.type === 'income' ? 'Expected income' : 'Unpaid'
+  return getEventStatus(event, today).label
 }
 
 export function CalendarPage() {
@@ -53,6 +53,14 @@ export function CalendarPage() {
 
   function move(direction: number) {
     setAnchor(view === 'week' ? shiftDays(anchor, direction * 7) : shiftMonth(anchor, direction))
+  }
+
+  function onCreateEventOn(date: IsoDate) {
+    onOpenEditor({ date })
+  }
+
+  function onSelectEvent(event: CalendarEvent) {
+    setSelected(event)
   }
 
   function onGoToToday() {
@@ -93,7 +101,7 @@ export function CalendarPage() {
       <Card className="min-w-0 p-5">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="mr-auto text-xl font-bold">{view === 'week' && calendarMonth
-            ? `${formatDate(calendarMonth.rangeStart)} – ${formatDate(shiftDays(calendarMonth.rangeEnd, -1))}`
+            ? formatDateRange(calendarMonth.rangeStart, calendarMonth.rangeEnd)
             : formatDate(anchor, 'monthYear')}</h2>
           <button type="button" aria-label={`Previous ${view}`} onClick={() => move(-1)} className="rounded p-2 hover:bg-surface-muted"><ChevronLeft /></button>
           <Button variant="outline" onClick={onGoToToday}>Today</Button>
@@ -101,21 +109,11 @@ export function CalendarPage() {
           <SegmentedControl<CalendarView> label="Calendar view" options={[{ value: 'month', label: 'Month' }, { value: 'week', label: 'Week' }]} value={view} onChange={setView} />
           <Button icon={Plus} onClick={() => onOpenEditor({ date: anchor })}>Create event</Button>
         </div>
-        <p className="mt-3 text-sm text-muted">Click a date to schedule a payment, or an entry to view its details. Recurring entries are marked ↻.</p>
-        {!calendarMonth && !error && <p role="status" className="mt-5">Loading calendar…</p>}
-        {calendarMonth && <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[560px] table-fixed border-collapse">
-          <thead><tr>{labels.map(label => <th key={label} className="border border-line py-2 text-sm">{label}</th>)}</tr></thead>
-          <tbody>{weeks.map(week => <tr key={week[0].date}>{week.map(day => {
-            const events = calendarMonth.events.filter(e => e.date === day.date)
-            return <td key={day.date} className={`h-28 border border-line p-1 align-top ${day.date === today ? 'bg-info-soft' : ''}`}>
-              <button type="button" aria-label={`Create payment on ${day.date}`} onClick={() => onOpenEditor({ date: day.date })} className={`mb-1 w-full rounded py-1 text-sm hover:bg-surface-muted ${day.inMonth ? 'font-semibold' : 'text-muted'}`}>{day.dayOfMonth}</button>
-              {events.map(event => <button type="button" key={event.id} onClick={() => setSelected(event)} title={`${event.title}: ${formatMoney(event.amountCents)} — ${status(event, today)}`} className={`mb-1 block w-full truncate rounded px-1.5 py-1 text-left text-xs ${event.paid || event.skipped ? 'bg-surface-muted text-muted' : event.type === 'income' ? 'bg-success-soft text-success' : event.date < today ? 'bg-danger-soft text-danger' : 'bg-info-soft text-ink'}`}>
-                {event.source === 'recurring' ? '↻ ' : ''}{event.paid ? '✓ ' : ''}{event.title}
-                {view === 'week' && <span className="block">{formatMoney(event.amountCents)}</span>}
-              </button>)}
-            </td>
-          })}</tr>)}</tbody>
-        </table></div>}
+        <p className="mt-3 text-sm text-muted">Click a day to schedule a payment, or an entry to see its details.</p>
+        {!calendarMonth && !error && <p role="status" className="mt-5 text-sm text-muted">Loading calendar…</p>}
+        {calendarMonth && (calendarMonth.view === 'week'
+          ? <WeekView days={weeks} weekdayLabels={labels} events={calendarMonth.events} today={today} onCreateEvent={onCreateEventOn} onSelectEvent={onSelectEvent} />
+          : <MonthGrid days={weeks} weekdayLabels={labels} events={calendarMonth.events} today={today} onCreateEvent={onCreateEventOn} onSelectEvent={onSelectEvent} />)}
         {calendarMonth && calendarMonth.events.length === 0 && <p className="mt-4 text-sm text-muted">No entries in this {view}. Select a date to add one.</p>}
       </Card>
 
