@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { ArrowDown, CirclePlus, Pencil, PiggyBank, Trash2, Wallet } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowDown, CircleCheck, CirclePlus, Info, Pencil, PiggyBank, Trash2, Wallet } from 'lucide-react'
 import { useBudgets } from '../hooks/usePlanning'
 import { PageHeader } from '../components/PageHeader'
 import { Card, CardHeader } from '../components/Card'
@@ -13,6 +13,7 @@ import { ProgressBar } from '../components/ProgressBar'
 import { RecordForm } from '../components/RecordForm'
 import { StatCard } from '../components/StatCard'
 import { StatusBadge } from '../components/StatusBadge'
+import { isBudgetableCategory } from '../lib/categories'
 import { pageError } from '../lib/errors'
 import { amountToCents } from '../lib/moneyInput'
 import { formatDateRange, formatLabel, formatMoney } from '../lib/format'
@@ -36,6 +37,31 @@ const budgetColumns: DataColumn[] = [
 function spentPercent(item: BudgetSummary): number {
   return item.budgetedCents > 0 ? (item.spentCents / item.budgetedCents) * 100 : 0
 }
+
+/** Rows the API should already leave out (archived or missing categories) are skipped here too, so they never render half-empty. */
+function isDisplayableSummary(item: BudgetSummary): boolean {
+  return Boolean(item.category?.id && item.category.name) && !item.category.archived
+}
+
+const noteDurationMs = 6000
+
+interface Note {
+  tone: 'success' | 'muted'
+  text: string
+}
+
+function InlineNote({ note }: { note: Note | null }) {
+  if (!note) return null
+  const Icon = note.tone === 'success' ? CircleCheck : Info
+  return (
+    <p role="status" className={`mt-4 flex items-center gap-2 text-sm font-medium ${note.tone === 'success' ? 'text-success' : 'text-muted'}`}>
+      <Icon className="size-4 shrink-0" strokeWidth={2} />
+      {note.text}
+    </p>
+  )
+}
+
+const alreadyRemovedNote: Note = { tone: 'muted', text: 'That item was already removed.' }
 
 function sumCents(summaries: BudgetSummary[], field: 'budgetedCents' | 'spentCents' | 'remainingCents'): number {
   return summaries.reduce((total, item) => total + item[field], 0)
@@ -99,16 +125,37 @@ export function BudgetsPage() {
   const [editing, setEditing] = useState<CategoryBudget | null | undefined>()
   const [categoryForm, setCategoryForm] = useState(false)
   const [removingCategory, setRemovingCategory] = useState<Category | null>(null)
+  const [budgetNote, setBudgetNote] = useState<Note | null>(null)
+  const [categoryNote, setCategoryNote] = useState<Note | null>(null)
+  /** Categories removed during this visit, so re-adding one of them can be reported as a restore. */
+  const [removedCategoryIds, setRemovedCategoryIds] = useState<string[]>([])
   const dialogOpen = editing !== undefined || categoryForm || removingCategory !== null
-  const summaries = data?.summaries ?? []
+  const summaries = (data?.summaries ?? []).filter(isDisplayableSummary)
+  const budgetableCategories = (data?.categories ?? []).filter(isBudgetableCategory)
+  // An existing budget on a category that is no longer offered stays selectable while it is edited.
+  const editingCategory = editing ? data?.categories.find((category) => category.id === editing.categoryId) : undefined
+  const pickerCategories = editingCategory && !budgetableCategories.includes(editingCategory) ? [...budgetableCategories, editingCategory] : budgetableCategories
+
+  useEffect(() => {
+    if (!budgetNote && !categoryNote) return
+    const timer = window.setTimeout(onHideNotes, noteDurationMs)
+    return () => window.clearTimeout(timer)
+  }, [budgetNote, categoryNote])
+
+  function onHideNotes() {
+    setBudgetNote(null)
+    setCategoryNote(null)
+  }
   const overBudgetCount = summaries.filter((item) => item.overBudget).length
 
   function onSetBudget() {
+    onHideNotes()
     clearMutationError()
     setEditing(null)
   }
 
   function onEditBudget(categoryId: string, period: BudgetPeriod) {
+    onHideNotes()
     clearMutationError()
     setEditing(data?.budgets.find((budget) => budget.categoryId === categoryId && budget.period === period))
   }
@@ -122,11 +169,18 @@ export function BudgetsPage() {
     return save({ categoryId: values.categoryId, period: values.period as BudgetPeriod, amountCents: amountToCents(values.amount) })
   }
 
+  function onBudgetAlreadyRemoved() {
+    clearMutationError()
+    setEditing(undefined)
+    setBudgetNote(alreadyRemovedNote)
+  }
+
   function onDeleteBudget() {
-    return editing ? remove(editing.id) : Promise.resolve(false)
+    return editing ? remove(editing.id, { onNotFound: onBudgetAlreadyRemoved }) : Promise.resolve(false)
   }
 
   function onAddCategory() {
+    onHideNotes()
     clearMutationError()
     setCategoryForm(true)
   }
@@ -137,16 +191,39 @@ export function BudgetsPage() {
   }
 
   function onSaveCategory(values: Record<string, string>) {
-    return addCategory(values.name)
+    const name = values.name.trim()
+    const activeIds = new Set(data?.categories.map((category) => category.id))
+    // Ids this page knows but that are not active: removed during this visit, or still referenced by a budget.
+    const archivedIds = new Set([...removedCategoryIds, ...(data?.budgets ?? []).map((budget) => budget.categoryId).filter((id) => !activeIds.has(id))])
+
+    function onCategoryAdded({ id }: { id: string }) {
+      setCategoryNote({ tone: 'success', text: archivedIds.has(id) ? `Restored ‘${name}’ with its history.` : `Added ‘${name}’.` })
+    }
+
+    return addCategory(name, { onDone: onCategoryAdded })
   }
 
   function onRemoveCategory(category: Category) {
+    onHideNotes()
     clearMutationError()
     setRemovingCategory(category)
   }
 
+  function onCategoryAlreadyRemoved() {
+    clearMutationError()
+    setRemovingCategory(null)
+    setCategoryNote(alreadyRemovedNote)
+  }
+
   function onConfirmRemoveCategory() {
-    return removingCategory ? removeCategory(removingCategory.id) : false
+    if (!removingCategory) return false
+    const removedId = removingCategory.id
+
+    function onCategoryRemoved() {
+      setRemovedCategoryIds((ids) => [...ids, removedId])
+    }
+
+    return removeCategory(removedId, { onDone: onCategoryRemoved, onNotFound: onCategoryAlreadyRemoved })
   }
 
   function onCloseRemoveCategory() {
@@ -159,8 +236,8 @@ export function BudgetsPage() {
       <PageHeader title="Category budgets" subtitle="Set weekly, monthly, or semester limits. History is retained when a new period starts." />
       <DataError error={pageError(error, mutationError, dialogOpen)} />
 
-      {editing !== undefined && <RecordForm title="Set category budget" initial={{ categoryId: editing?.categoryId ?? data?.categories[0]?.id ?? '', period: editing?.period ?? 'monthly', amount: editing ? (editing.amountCents / 100).toFixed(2) : '' }} fields={[
-        { name: 'categoryId', label: 'Category', options: (data?.categories ?? []).map(c => ({ value: c.id, label: c.name })) },
+      {editing !== undefined && <RecordForm title="Set category budget" initial={{ categoryId: editing?.categoryId ?? budgetableCategories[0]?.id ?? '', period: editing?.period ?? 'monthly', amount: editing ? (editing.amountCents / 100).toFixed(2) : '' }} fields={[
+        { name: 'categoryId', label: 'Category', options: pickerCategories.map(c => ({ value: c.id, label: c.name })) },
         { name: 'period', label: 'Period', options: budgetPeriods.map(value => ({ value, label: formatLabel(value) })), half: true },
         { name: 'amount', label: 'Budget (CAD)', type: 'number', half: true },
       ]} error={mutationError} deleteMessage="This budget will be removed. Your transactions are kept." onClose={onCloseBudgetForm} onDelete={editing ? onDeleteBudget : undefined} onSave={onSaveBudget} />}
@@ -193,21 +270,22 @@ export function BudgetsPage() {
             title="Current periods"
             subtitle="Spending against each category budget this period."
             action={
-              <Button icon={CirclePlus} onClick={onSetBudget} disabled={!data?.categories.length} className="px-5 py-3 text-[15px]">
+              <Button icon={CirclePlus} onClick={onSetBudget} disabled={!budgetableCategories.length} className="px-5 py-3 text-[15px]">
                 Set category budget
               </Button>
             }
           />
+          <InlineNote note={budgetNote} />
         </div>
         <DataTable
           columns={budgetColumns}
           loading={!data && !error}
           failed={!data && Boolean(error)}
-          empty={data?.summaries.length === 0}
+          empty={Boolean(data) && summaries.length === 0}
           emptyMessage="No category budgets set yet."
           className="mt-5"
         >
-          {data?.summaries.map((item) => (
+          {summaries.map((item) => (
             <BudgetRow key={`${item.category.id}-${item.period}`} item={item} onEditBudget={onEditBudget} />
           ))}
         </DataTable>
@@ -223,6 +301,7 @@ export function BudgetsPage() {
             </Button>
           }
         />
+        <InlineNote note={categoryNote} />
         {!data && !error && (
           <p role="status" className="mt-5 text-[15px] text-muted">
             Loading…
