@@ -36,6 +36,17 @@ function StatusIcons({ status, recurring, skipped, compact = false }: StatusIcon
   )
 }
 
+/** Month cells are narrow, so the marker sits as a small badge on the chip's corner instead of taking text space. */
+function CornerMarker({ status, recurring, skipped }: Omit<StatusIconsProps, 'compact'>) {
+  if (!status.late && !status.settled && !recurring) return null
+  if (skipped && !recurring) return null
+  return (
+    <span className="absolute -top-1.5 -right-1.5 grid size-4 place-items-center rounded-full bg-surface text-ink shadow-sm ring-1 ring-line [&>svg]:size-2.5">
+      <StatusIcons status={status} recurring={recurring} skipped={skipped} compact />
+    </span>
+  )
+}
+
 /** Entry on the calendar, coloured by kind. Recurring, paid and overdue entries also carry an icon, and the status is in its name. */
 export function EventChip({ event, today, onSelect, detailed = false }: EventChipProps) {
   const { icon: KindIcon, tone } = getEventStyle(event.kind)
@@ -73,8 +84,8 @@ export function EventChip({ event, today, onSelect, detailed = false }: EventChi
       className={`relative z-10 flex w-full items-center gap-1 rounded-md px-1.5 py-1 text-left text-[11px] font-medium ${look}`}
     >
       <KindIcon className="size-3.5 shrink-0" strokeWidth={2} />
-      <span className={`line-clamp-2 min-w-0 flex-1 leading-tight ${event.skipped ? 'line-through' : ''}`}>{event.shortTitle || event.title}</span>
-      <StatusIcons status={status} recurring={recurring} skipped={Boolean(event.skipped)} compact />
+      <span className={`line-clamp-2 min-w-0 flex-1 leading-tight break-words ${event.skipped ? 'line-through' : ''}`}>{event.shortTitle || event.title}</span>
+      <CornerMarker status={status} recurring={recurring} skipped={Boolean(event.skipped)} />
     </button>
   )
 }

@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { MemoryRouter } from 'react-router'
 import type { useCalendar } from '../hooks/useCalendar'
 import { CalendarPage } from './CalendarPage'
 
@@ -23,5 +24,5 @@ const calendar: ReturnType<typeof useCalendar> = {
 vi.mock('../hooks/useCalendar', () => ({ useCalendar: () => calendar }))
 
 it('renders a new account with no scheduled payment without crashing', () => {
-  expect(renderToStaticMarkup(<CalendarPage />)).toContain('No payments')
+  expect(renderToStaticMarkup(<MemoryRouter><CalendarPage /></MemoryRouter>)).toContain('No payments')
 })
