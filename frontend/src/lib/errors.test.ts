@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { ApiError } from './apiClient'
 import { errorMessage, pageError } from './errors'
-import { formatLabel } from './format'
+import { formatDateRange, formatLabel } from './format'
 
 it('shows the backend message from an API error', () => {
   expect(errorMessage(new ApiError(400, 'A category with this name already exists.'))).toBe('A category with this name already exists.')
@@ -30,4 +30,10 @@ it('formats stored values as labels', () => {
   expect(formatLabel('credit_card')).toBe('Credit card')
   expect(formatLabel('weekly')).toBe('Weekly')
   expect(formatLabel('opted_out')).toBe('Opted out')
+})
+
+it('shows exclusive-end ranges with the last included day', () => {
+  expect(formatDateRange('2024-09-01', '2024-10-01')).toBe('Sep 1 – Sep 30, 2024')
+  expect(formatDateRange('2024-12-01', '2025-01-01')).toBe('Dec 1 – Dec 31, 2024')
+  expect(formatDateRange('2024-12-30', '2025-01-06')).toBe('Dec 30, 2024 – Jan 5, 2025')
 })

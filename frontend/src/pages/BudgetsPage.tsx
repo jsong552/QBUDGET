@@ -1,18 +1,98 @@
 import { useState } from 'react'
+import { ArrowDown, CirclePlus, Pencil, PiggyBank, Trash2, Wallet } from 'lucide-react'
 import { useBudgets } from '../hooks/usePlanning'
 import { PageHeader } from '../components/PageHeader'
-import { Card } from '../components/Card'
+import { Card, CardHeader } from '../components/Card'
 import { Button } from '../components/Button'
+import { CategoryBadge } from '../components/CategoryBadge'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { DataCell, DataRow, DataTable, type DataColumn } from '../components/DataTable'
 import { DataError } from '../components/DataError'
+import { IconButton } from '../components/IconButton'
+import { ProgressBar } from '../components/ProgressBar'
 import { RecordForm } from '../components/RecordForm'
+import { StatCard } from '../components/StatCard'
+import { StatusBadge } from '../components/StatusBadge'
 import { pageError } from '../lib/errors'
 import { amountToCents } from '../lib/moneyInput'
-import { formatLabel, formatMoney } from '../lib/format'
+import { formatDateRange, formatLabel, formatMoney } from '../lib/format'
 import type { Category } from '../types'
-import type { BudgetPeriod, CategoryBudget } from '../types/planning'
+import type { BudgetPeriod, BudgetSummary, CategoryBudget } from '../types/planning'
 
 const budgetPeriods: BudgetPeriod[] = ['weekly', 'monthly', 'semester']
+
+const budgetColumns: DataColumn[] = [
+  { key: 'category', label: 'Category', className: 'w-[14%]' },
+  { key: 'period', label: 'Period', className: 'w-[9%]' },
+  { key: 'dates', label: 'Dates', className: 'w-[16%]' },
+  { key: 'budget', label: 'Budget', className: 'w-[10%]' },
+  { key: 'spent', label: 'Spent', className: 'w-[10%]' },
+  { key: 'remaining', label: 'Remaining', className: 'w-[11%]' },
+  { key: 'progress', label: 'Progress', className: 'w-[11%]' },
+  { key: 'status', label: 'Status', className: 'w-[11%]' },
+  { key: 'actions', label: 'Actions' },
+]
+
+function spentPercent(item: BudgetSummary): number {
+  return item.budgetedCents > 0 ? (item.spentCents / item.budgetedCents) * 100 : 0
+}
+
+function sumCents(summaries: BudgetSummary[], field: 'budgetedCents' | 'spentCents' | 'remainingCents'): number {
+  return summaries.reduce((total, item) => total + item[field], 0)
+}
+
+interface BudgetRowProps {
+  item: BudgetSummary
+  onEditBudget: (categoryId: string, period: BudgetPeriod) => void
+}
+
+function BudgetRow({ item, onEditBudget }: BudgetRowProps) {
+  const over = item.overBudget || item.remainingCents < 0
+
+  function onEditClick() {
+    onEditBudget(item.category.id, item.period)
+  }
+
+  return (
+    <DataRow>
+      <DataCell>
+        <CategoryBadge category={item.category} />
+      </DataCell>
+      <DataCell>{formatLabel(item.period)}</DataCell>
+      <DataCell className="text-sm text-muted">{formatDateRange(item.startDate, item.endDate)}</DataCell>
+      <DataCell>{formatMoney(item.budgetedCents)}</DataCell>
+      <DataCell>{formatMoney(item.spentCents)}</DataCell>
+      <DataCell className={`font-medium ${over ? 'text-danger' : 'text-success'}`}>{formatMoney(item.remainingCents)}</DataCell>
+      <DataCell>
+        <ProgressBar percent={spentPercent(item)} tone={item.overBudget ? 'danger' : 'primary'} />
+      </DataCell>
+      <DataCell>
+        <StatusBadge status={item.overBudget ? 'over_budget' : 'on_track'} />
+      </DataCell>
+      <DataCell>
+        <IconButton icon={Pencil} label={`Edit ${item.category.name} ${item.period} budget`} onClick={onEditClick} />
+      </DataCell>
+    </DataRow>
+  )
+}
+
+interface CategoryItemProps {
+  category: Category
+  onRemoveCategory: (category: Category) => void
+}
+
+function CategoryItem({ category, onRemoveCategory }: CategoryItemProps) {
+  function onRemoveClick() {
+    onRemoveCategory(category)
+  }
+
+  return (
+    <li className="flex items-center gap-2">
+      <CategoryBadge category={category} />
+      {category.custom && <IconButton icon={Trash2} label={`Remove ${category.name}`} tone="danger" onClick={onRemoveClick} />}
+    </li>
+  )
+}
 
 export function BudgetsPage() {
   const { data, error, mutationError, clearMutationError, save, remove, addCategory, removeCategory } = useBudgets()
@@ -20,6 +100,8 @@ export function BudgetsPage() {
   const [categoryForm, setCategoryForm] = useState(false)
   const [removingCategory, setRemovingCategory] = useState<Category | null>(null)
   const dialogOpen = editing !== undefined || categoryForm || removingCategory !== null
+  const summaries = data?.summaries ?? []
+  const overBudgetCount = summaries.filter((item) => item.overBudget).length
 
   function onSetBudget() {
     clearMutationError()
@@ -72,20 +154,90 @@ export function BudgetsPage() {
     setRemovingCategory(null)
   }
 
-  return <div><PageHeader title="Category budgets" subtitle="Set weekly, monthly, or semester limits. History is retained when a new period starts." /><DataError error={pageError(error, mutationError, dialogOpen)} />
-    <div className="my-5 flex gap-3"><Button onClick={onSetBudget} disabled={!data?.categories.length}>Set category budget</Button><Button variant="outline" onClick={onAddCategory}>Add category</Button></div>
-    {editing !== undefined && <RecordForm title="Set category budget" initial={{ categoryId: editing?.categoryId ?? data?.categories[0]?.id ?? '', period: editing?.period ?? 'monthly', amount: editing ? (editing.amountCents / 100).toFixed(2) : '' }} fields={[
-      { name: 'categoryId', label: 'Category', options: (data?.categories ?? []).map(c => ({ value: c.id, label: c.name })) },
-      { name: 'period', label: 'Period', options: budgetPeriods.map(value => ({ value, label: formatLabel(value) })), half: true },
-      { name: 'amount', label: 'Budget (CAD)', type: 'number', half: true },
-    ]} error={mutationError} deleteMessage="This budget will be removed. Your transactions are kept." onClose={onCloseBudgetForm} onDelete={editing ? onDeleteBudget : undefined} onSave={onSaveBudget} />}
-    {categoryForm && <RecordForm title="Add category" fields={[{ name: 'name', label: 'Name', maxLength: 80 }]} initial={{ name: '' }} error={mutationError} onSave={onSaveCategory} onClose={onCloseCategoryForm} />}
-    {removingCategory && <ConfirmDialog title={`Remove ${removingCategory.name}?`} message="Existing records keep their category." confirmLabel="Remove" busyLabel="Removing…" variant="danger" error={mutationError} onConfirm={onConfirmRemoveCategory} onClose={onCloseRemoveCategory} />}
-    <Card className="p-6"><h2 className="text-xl font-bold">Current periods</h2>
-      {data?.summaries.length === 0 && <p className="mt-4 text-muted">No category budgets set yet.</p>}
-      <table className="mt-4 w-full text-left"><thead><tr><th>Category / period</th><th>Budget</th><th>Spent</th><th>Remaining</th><th>Action</th></tr></thead><tbody>
-        {data?.summaries.map(item => <tr key={`${item.category.id}-${item.period}`} className="border-t border-line"><td className="py-4">{item.category.name}<div className="text-sm text-muted">{item.period}: {item.startDate} to {item.endDate} (exclusive)</div></td><td>{formatMoney(item.budgetedCents)}</td><td>{formatMoney(item.spentCents)}</td><td className={item.overBudget ? 'text-danger' : 'text-success'}>{formatMoney(item.remainingCents)}{item.overBudget && <strong className="block">Over budget</strong>}</td><td><Button variant="outline" onClick={() => onEditBudget(item.category.id, item.period)}>Edit</Button></td></tr>)}
-      </tbody></table>
-    </Card><Card className="mt-5 p-6"><h2 className="text-xl font-bold">Categories</h2><ul className="mt-3 grid grid-cols-3 gap-3">{data?.categories.map(c => <li key={c.id} className="flex items-center justify-between rounded border border-line p-3">{c.name}{c.custom && <Button variant="danger" onClick={() => onRemoveCategory(c)}>Remove</Button>}</li>)}</ul></Card>
-  </div>
+  return (
+    <div>
+      <PageHeader title="Category budgets" subtitle="Set weekly, monthly, or semester limits. History is retained when a new period starts." />
+      <DataError error={pageError(error, mutationError, dialogOpen)} />
+
+      {editing !== undefined && <RecordForm title="Set category budget" initial={{ categoryId: editing?.categoryId ?? data?.categories[0]?.id ?? '', period: editing?.period ?? 'monthly', amount: editing ? (editing.amountCents / 100).toFixed(2) : '' }} fields={[
+        { name: 'categoryId', label: 'Category', options: (data?.categories ?? []).map(c => ({ value: c.id, label: c.name })) },
+        { name: 'period', label: 'Period', options: budgetPeriods.map(value => ({ value, label: formatLabel(value) })), half: true },
+        { name: 'amount', label: 'Budget (CAD)', type: 'number', half: true },
+      ]} error={mutationError} deleteMessage="This budget will be removed. Your transactions are kept." onClose={onCloseBudgetForm} onDelete={editing ? onDeleteBudget : undefined} onSave={onSaveBudget} />}
+      {categoryForm && <RecordForm title="Add category" fields={[{ name: 'name', label: 'Name', maxLength: 80 }]} initial={{ name: '' }} error={mutationError} onSave={onSaveCategory} onClose={onCloseCategoryForm} />}
+      {removingCategory && <ConfirmDialog title={`Remove ${removingCategory.name}?`} message="Existing records keep their category." confirmLabel="Remove" busyLabel="Removing…" variant="danger" error={mutationError} onConfirm={onConfirmRemoveCategory} onClose={onCloseRemoveCategory} />}
+
+      {data && (
+        <div className="mt-6 grid grid-cols-3 gap-5">
+          <StatCard
+            tone="primary"
+            icon={PiggyBank}
+            label="Total budgeted"
+            value={formatMoney(sumCents(summaries, 'budgetedCents'))}
+            caption={`Across ${summaries.length} active ${summaries.length === 1 ? 'budget' : 'budgets'}`}
+          />
+          <StatCard tone="danger" icon={ArrowDown} label="Spent" value={formatMoney(sumCents(summaries, 'spentCents'))} caption="This period" />
+          <StatCard
+            tone="accent"
+            icon={Wallet}
+            label="Remaining"
+            value={formatMoney(sumCents(summaries, 'remainingCents'))}
+            caption={<span className={overBudgetCount > 0 ? 'text-danger' : 'text-success'}>{overBudgetCount} over budget</span>}
+          />
+        </div>
+      )}
+
+      <Card className="mt-5 px-4 pt-5 pb-1">
+        <div className="px-4">
+          <CardHeader
+            title="Current periods"
+            subtitle="Spending against each category budget this period."
+            action={
+              <Button icon={CirclePlus} onClick={onSetBudget} disabled={!data?.categories.length} className="px-5 py-3 text-[15px]">
+                Set category budget
+              </Button>
+            }
+          />
+        </div>
+        <DataTable
+          columns={budgetColumns}
+          loading={!data && !error}
+          failed={!data && Boolean(error)}
+          empty={data?.summaries.length === 0}
+          emptyMessage="No category budgets set yet."
+          className="mt-5"
+        >
+          {data?.summaries.map((item) => (
+            <BudgetRow key={`${item.category.id}-${item.period}`} item={item} onEditBudget={onEditBudget} />
+          ))}
+        </DataTable>
+      </Card>
+
+      <Card className="mt-5 px-8 pt-5 pb-6">
+        <CardHeader
+          title="Categories"
+          subtitle="Custom categories can be removed; built-in ones stay."
+          action={
+            <Button variant="outline" icon={CirclePlus} onClick={onAddCategory} className="px-5 py-3 text-[15px]">
+              Add category
+            </Button>
+          }
+        />
+        {!data && !error && (
+          <p role="status" className="mt-5 text-[15px] text-muted">
+            Loading…
+          </p>
+        )}
+        {!data && Boolean(error) && <p className="mt-5 text-[15px] text-muted">Could not load this list.</p>}
+        {data?.categories.length === 0 && <p className="mt-5 text-[15px] text-muted">No categories yet. Add one to start budgeting.</p>}
+        {data && data.categories.length > 0 && (
+          <ul className="mt-5 flex flex-wrap gap-3">
+            {data.categories.map((category) => (
+              <CategoryItem key={category.id} category={category} onRemoveCategory={onRemoveCategory} />
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  )
 }

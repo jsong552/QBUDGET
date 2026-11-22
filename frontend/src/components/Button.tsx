@@ -16,7 +16,7 @@ interface ButtonProps {
 }
 
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-primary text-on-primary hover:bg-primary-hover shadow-sm',
+  primary: 'border border-transparent bg-primary text-on-primary hover:bg-primary-hover shadow-sm',
   outline: 'border border-line-strong bg-surface text-ink hover:bg-surface-muted',
   danger: 'border border-danger/40 bg-danger-soft text-danger hover:bg-danger/15',
 }
