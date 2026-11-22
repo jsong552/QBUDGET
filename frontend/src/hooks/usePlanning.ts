@@ -18,7 +18,13 @@ export function useRecurring() {
   const { run, error: mutationError, clearError: clearMutationError } = useMutation()
   const write = useCallback((action: () => Promise<unknown>) => run(action, { onSuccess: resource.reload }), [run, resource.reload])
   return { data: resource.data, categories: categories.data?.categories ?? [], error: resource.error ?? categories.error ?? mutationError, mutationError, clearMutationError,
-    save: (id: string | null, value: Omit<RecurringEntry, 'id'>) => write(() => service.saveRecurring(id, value)), remove: (id: string) => write(() => service.deleteRecurring(id)), sync: () => write(service.syncRecurring) }
+    save: (id: string | null, value: Omit<RecurringEntry, 'id'>) => write(() => service.saveRecurring(id, value)), remove: (id: string) => write(() => service.deleteRecurring(id)),
+    /** Generates due entries. Resolves to how many were created, or null if the request failed. */
+    sync: async () => {
+      let created = 0
+      const ok = await run(service.syncRecurring, { onSuccess: (result) => { created = result.created; resource.reload() } })
+      return ok ? created : null
+    } }
 }
 export function useSemester() {
   const resource = useAsync(service.getSemester)
