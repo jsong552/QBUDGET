@@ -39,3 +39,13 @@ Budget IDs enforce one definition per category/period. Recurrence IDs use rec_<s
 Republish the root firestore.rules before using new screens. Existing data requires no bulk rewrite for the newly optional fields. Legacy prototype categories remain recognized as archived built-ins; users can reclassify entries to the RD defaults. Existing overall spending-limit goals remain goals rather than being silently migrated into category budgets.
 
 There is no local-file persistence or import/export implementation. FR-18 in the RD must be reconciled with the chosen Firestore design.
+
+## Tuition estimates
+
+`backend/src/tuition_rates.hpp` holds hard-coded 2026-2027 undergraduate per-unit tuition from
+https://www.queensu.ca/registrar/tuition-fees/undergraduate, by program and residency (Ontario, Out of Province,
+International). When a SemesterPlan has `tuitionPerCourseCents` = 0 and its free-text `faculty` and `studentStatus`
+match a program and residency, the semester summary uses `per-unit rate x 3 units` as the per-course rate and reports
+`tuitionRateSource: "estimate"`. A rate the student enters always wins (`"entered"`). `GET /api/semester/rates` lists
+the supported programs and rates. Only tuition is estimated; SAL, ancillary fees and UHIP are not included. The 3-unit
+course size is an assumption (the page charges per unit). These numbers must be reviewed by hand each year.
