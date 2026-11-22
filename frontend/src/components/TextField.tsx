@@ -5,7 +5,7 @@ interface TextFieldProps {
   label?: string
   /** Used as the accessible name when there is no visible label. */
   ariaLabel?: string
-  type?: 'text' | 'email' | 'password' | 'search'
+  type?: 'text' | 'email' | 'password' | 'search' | 'date' | 'number'
   placeholder?: string
   /** Controlled value; leave out (with `defaultValue`) for an uncontrolled field. */
   value?: string
@@ -14,6 +14,10 @@ interface TextFieldProps {
   disabled?: boolean
   required?: boolean
   autoComplete?: string
+  /** For number and date fields. */
+  min?: string
+  step?: string
+  maxLength?: number
   icon?: LucideIcon
   size?: 'md' | 'lg'
   className?: string
@@ -30,6 +34,9 @@ export function TextField({
   disabled = false,
   required = false,
   autoComplete,
+  min,
+  step,
+  maxLength,
   icon: Icon,
   size = 'lg',
   className = '',
@@ -60,6 +67,9 @@ export function TextField({
           disabled={disabled}
           required={required}
           autoComplete={autoComplete}
+          min={min}
+          step={step}
+          maxLength={maxLength}
           className={`${size === 'lg' ? 'h-12' : 'h-11'} w-full rounded-lg border border-line-strong bg-surface pr-4 text-[15px] text-ink outline-none placeholder:text-subtle focus:border-primary disabled:bg-surface-disabled disabled:text-muted ${
             Icon ? 'pl-12' : 'pl-4'
           }`}
