@@ -45,11 +45,6 @@ export function shiftDays(value: IsoDate, days: number): IsoDate {
   return toIsoDate(date)
 }
 
-export function localToday(): IsoDate {
-  const date = new Date()
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
 export function buildWeek(start: IsoDate): CalendarDay[] {
   return Array.from({ length: 7 }, (_, index) => {
     const date = shiftDays(start, index)
