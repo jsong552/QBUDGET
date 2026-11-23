@@ -218,6 +218,11 @@ export interface BudgetGoalInput {
 export type EventKind = 'rent' | 'credit_card' | 'tuition' | 'utilities' | 'textbook' | (string & {})
 
 export interface CalendarEvent {
+  source?: 'event' | 'recurring'
+  sourceId?: string
+  transactionId?: string | null
+  type?: TransactionType
+  skipped?: boolean
   paid?: boolean
   id: string
   title: string
@@ -236,6 +241,8 @@ export interface UpcomingEvent {
 }
 
 export interface CalendarSummary {
+  overdueCount: number
+  overdueTotalCents: number
   upcomingCount: number
   upcomingTotalCents: number
   windowDays: number
@@ -247,6 +254,11 @@ export interface CalendarSummary {
 }
 
 export interface CalendarMonth {
+  anchor: IsoDate
+  rangeStart: IsoDate
+  rangeEnd: IsoDate
+  view: CalendarView
+  weekStart: WeekStart
   /** First day of the displayed month. */
   month: IsoDate
   today: IsoDate

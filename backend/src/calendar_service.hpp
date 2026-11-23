@@ -1,49 +1,56 @@
 // Scheduled payments and recurring transaction generation; deterministic dates support testing.
 #pragma once
 #include "transaction_service.hpp"
-
 namespace qbudget {
-    class CalendarService {
-        EventRepository &repository;
+class CalendarService {
+    EventRepository &repository;
+    TransactionRepository *transactions;
 
-    public:
-        explicit CalendarService(EventRepository &repo) : repository(repo) {
+  public:
+    explicit CalendarService(EventRepository &repo, TransactionRepository *ledger = nullptr)
+        : repository(repo), transactions(ledger) {}
+    std::vector<CalendarEvent> list(std::optional<DateRange> range = std::nullopt) const {
+        auto values = repository.list();
+        if (transactions) {
+            auto recorded = transactions->list();
+            for (auto &event : values)
+                for (const auto &row : recorded)
+                    // Paid and deliberately skipped occurrences are no longer future obligations.
+                    if (row.id == "cal_" + event.id) event.paid = true;
         }
-
-        std::vector<CalendarEvent> list(std::optional<DateRange> range = std::nullopt) const {
-            auto values = repository.list();
-            values.erase(
-                std::remove_if(values.begin(), values.end(),
-                               [&](const CalendarEvent &e) { return range && !range->contains(e.date); }),
-                values.end());
-            std::sort(values.begin(), values.end(),
-                      [](const CalendarEvent &a, const CalendarEvent &b) { return a.date < b.date; });
-            return values;
+        values.erase(
+            std::remove_if(values.begin(), values.end(),
+                           [&](const CalendarEvent &e) { return range && !range->contains(e.date); }),
+            values.end());
+        std::sort(values.begin(), values.end(),
+                  [](const CalendarEvent &a, const CalendarEvent &b) { return a.date < b.date; });
+        return values;
+    }
+    std::vector<UpcomingEvent> upcoming(Date now) const {
+        std::vector<UpcomingEvent> result;
+        for (const auto &event : list())
+            if (!event.paid) {
+                auto days = now.daysUntil(event.date);
+                result.push_back({event, days, days <= 3});
+            }
+        return result;
+    }
+    std::string create(const CalendarEvent &event) const {
+        return repository.add(event);
+    }
+    void update(const std::string &id, const CalendarEvent &event) const {
+        auto current = repository.find(id);
+        if (!current) throw ApiError(404, "Calendar event not found.");
+        if (transactions && transactions->find("cal_" + id)) {
+            require(current->amountCents == event.amountCents && current->date == event.date &&
+                    current->kind == event.kind, "Recorded payments retain their amount, due date and kind. Edit the transaction separately.");
         }
-
-        std::vector<UpcomingEvent> upcoming(Date now) const {
-            std::vector<UpcomingEvent> result;
-            for (const auto &event: list())
-                if (!event.paid && now <= event.date) {
-                    auto days = now.daysUntil(event.date);
-                    result.push_back({event, days, days <= 3});
-                }
-            return result;
-        }
-
-        std::string create(const CalendarEvent &event) const {
-            return repository.add(event);
-        }
-
-        void update(const std::string &id, const CalendarEvent &event) const {
-            repository.save(id, event);
-        }
-
-        void remove(const std::string &id) const {
-            repository.remove(id);
-        }
-    };
-
+        repository.save(id, event);
+    }
+    void remove(const std::string &id) const {
+        repository.remove(id);
+    }
+};
     // remove surrounding whitespace from recurrence service descriptions
     // Taken from Theo's trimName function in category_services.hpp
     inline std::string trimWhitespace(const std::string &value) {

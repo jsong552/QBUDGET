@@ -33,6 +33,7 @@ export type DateStyle =
   | 'month' // September
   | 'monthShort' // Sep
   | 'monthYear' // September 2024
+  | 'weekdayLong' // Tuesday, September 10
 
 const dateOptions: Record<DateStyle, Intl.DateTimeFormatOptions> = {
   medium: { month: 'short', day: 'numeric', year: 'numeric' },
@@ -41,6 +42,7 @@ const dateOptions: Record<DateStyle, Intl.DateTimeFormatOptions> = {
   month: { month: 'long' },
   monthShort: { month: 'short' },
   monthYear: { month: 'long', year: 'numeric' },
+  weekdayLong: { weekday: 'long', month: 'long', day: 'numeric' },
 }
 
 /** Parses a `YYYY-MM-DD` string as a calendar date (no time zone shift). */
@@ -54,6 +56,7 @@ export function formatDate(date: IsoDate, style: DateStyle = 'medium'): string {
 }
 
 export function formatDaysAway(days: number): string {
+  if (days < 0) return `${Math.abs(days)} ${days === -1 ? 'day' : 'days'} overdue`
   if (days === 0) return 'Today'
   return days === 1 ? '1 day away' : `${days} days away`
 }

@@ -13,3 +13,11 @@ export const updateReminderSettings = (settings: ReminderSettings) => apiClient.
 
 export const updateEvent = (id: string, input: CalendarEventInput) => apiClient.put<void>(`/calendar/events/${encodeURIComponent(id)}`, input)
 export const removeEvent = (id: string) => apiClient.delete<void>(`/calendar/events/${encodeURIComponent(id)}`)
+
+export interface CalendarPaymentInput {
+  source: 'event' | 'recurring'
+  sourceId: string
+  date: IsoDate
+  paidDate: IsoDate
+}
+export const recordCalendarPayment = (input: CalendarPaymentInput) => apiClient.post<{ transactionId: string }>('/calendar/pay', input)

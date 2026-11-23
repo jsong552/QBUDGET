@@ -48,7 +48,12 @@ class ForecastService {
                 (baseline.expensesCents / 30) * days + ((baseline.expensesCents % 30) * days + 15) / 30;
             MoneyCents knownIncome = 0, knownExpenses = 0;
             for (const auto &entry : recurring) {
-                auto count = RecurrenceService::occurrences(entry, {futureStart, end}).size();
+                auto dates = RecurrenceService::occurrences(entry, {futureStart, end});
+                auto count = std::count_if(dates.begin(), dates.end(), [&](Date date) {
+                    auto id = "rec_" + entry.id + "_" + date.str();
+                    return std::none_of(ledger.transactions().begin(), ledger.transactions().end(),
+                                        [&](const Transaction &t) { return t.id == id; });
+                });
                 auto amount = entry.amountCents * static_cast<MoneyCents>(count);
                 if (amount > 0)
                     knownIncome = addMoney(knownIncome, amount);
