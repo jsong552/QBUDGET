@@ -2,6 +2,7 @@
 #include "../src/api_controller.hpp"
 #include "../src/auth_service.hpp"
 #include "../src/firestore_client.hpp"
+#include "../src/request_date.hpp"
 #include "memory_store.hpp"
 #include <iostream>
 #include <functional>
@@ -68,6 +69,73 @@ int main() {
         auto semester = DateRange::containing(Date("2026-12-31"), BudgetPeriod::Semester);
         check(semester.start == Date("2026-09-01") && semester.end == Date("2027-01-01"),
               "Semester boundary");
+        // Request-local 'today' must agree with the browser, independent of the server's timezone.
+        {
+            httplib::Request request;
+            auto instant = dateTime("2026-11-19") + 60 * 60; // November 18, 8 p.m. in Toronto.
+            check(requestDate(request, instant) == Date("2026-11-19"), "Legacy clients default to UTC");
+            request.headers.emplace("X-Timezone-Offset", "300");
+            check(requestDate(request, instant) == Date("2026-11-18"), "Toronto evening stays on local date");
+            auto midnight = dateTime("2026-11-19") + 5 * 60 * 60;
+            check(requestDate(request, midnight - 1) == Date("2026-11-18"), "One second before local midnight");
+            check(requestDate(request, midnight) == Date("2026-11-19"), "Local midnight starts the next date");
+            check(requestDate(request, dateTime("2027-01-01") + 60 * 60) == Date("2026-12-31"),
+                  "Local year boundary does not follow UTC prematurely");
+            request.headers.clear();
+            request.headers.emplace("X-Timezone-Offset", "240");
+            check(requestDate(request, dateTime("2026-07-02") + 3 * 60 * 60) == Date("2026-07-01"),
+                  "Toronto daylight-saving offset");
+            request.headers.clear();
+            request.headers.emplace("X-Timezone-Offset", "-345");
+            check(requestDate(request, dateTime("2026-11-18") + 19 * 60 * 60) == Date("2026-11-19"),
+                  "Quarter-hour timezone east of UTC");
+            for (const auto &invalid : {"", "-", "+", "300x", "3.5", " 300", "300 ", "841", "-841", "99999", "300,240"}) {
+                request.headers.clear();
+                request.headers.emplace("X-Timezone-Offset", invalid);
+                fails(400, [&] { requestDate(request, instant); });
+            }
+            request.headers.clear();
+            request.headers.emplace("X-Timezone-Offset", "300");
+            request.headers.emplace("X-Timezone-Offset", "240");
+            fails(400, [&] { requestDate(request, instant); });
+        }
+        // Use the production request clock when checking due dates and recording payments.
+        {
+            MemoryStore localDb;
+            EventRepository events(localDb);
+            auto dueToday = events.add({"", "Due today", "rent", Date("2026-11-18"), 50000, true, false});
+            events.add({"", "Due yesterday", "other", Date("2026-11-17"), 1500, true, false});
+            auto beforeMidnight = dateTime("2026-11-19") + 5 * 60 * 60 - 1;
+            auto localCall = [&](const std::string &path, std::time_t instant, Json input = nullptr) {
+                httplib::Request request;
+                request.method = input.is_null() ? "GET" : "POST";
+                request.path = path;
+                request.body = input.dump();
+                request.headers.emplace("X-Timezone-Offset", "300");
+                return ApiController(localDb, {"alice", "alice@example.com", "Alice", "token"},
+                                     requestDate(request, instant)).handle(request);
+            };
+            check(localCall("/api/calendar/events", beforeMidnight)["today"] == "2026-11-18",
+                  "Calendar highlight uses local today");
+            check(localCall("/api/app/today", beforeMidnight).get<std::string>().find("November 18, 2026") != std::string::npos,
+                  "Page date label uses local today");
+            check(localCall("/api/calendar/summary", beforeMidnight)["overdueCount"] == 1,
+                  "A payment due today is not overdue before local midnight");
+            auto notices = localCall("/api/notifications", beforeMidnight).dump();
+            check(notices.find("Due today is due 2026-11-18") != std::string::npos &&
+                      notices.find("Due yesterday is overdue since 2026-11-17") != std::string::npos,
+                  "Reminder text separates due today from overdue using local date");
+            check(localCall("/api/calendar/summary", beforeMidnight + 1)["overdueCount"] == 2,
+                  "Unpaid payment becomes overdue at local midnight");
+            Json payment = {{"source", "event"}, {"sourceId", dueToday}, {"paidDate", "2026-11-19"}};
+            fails(400, [&] { localCall("/api/calendar/pay", beforeMidnight, payment); });
+            payment["paidDate"] = "2026-11-18";
+            localCall("/api/calendar/pay", beforeMidnight, payment);
+            check(TransactionRepository(localDb).list().size() == 1,
+                  "Payment can be recorded on the user's current date");
+            check(localCall("/api/calendar/summary", beforeMidnight + 1)["overdueCount"] == 1,
+                  "Paid event stays resolved after local midnight");
+        }
         MemoryStore db;
         CategoryRepository categoryRepo(db);
         CategoryService categories(categoryRepo);

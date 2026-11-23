@@ -37,6 +37,8 @@ export async function apiRequest<T>(path: string, { method = 'GET', body, timeou
   const response = await fetch(`${baseUrl}/api${path}`, {
     method,
     headers: {
+      // Recompute for every request so local midnight, travel and DST changes are respected.
+      'X-Timezone-Offset': String(new Date().getTimezoneOffset()),
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
