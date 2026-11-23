@@ -23,6 +23,7 @@ import { Select, type SelectOption } from '../components/Select'
 import { TextField } from '../components/TextField'
 import { Toggle } from '../components/Toggle'
 import type { Tone } from '../components/tones'
+import { focusRing } from '../components/focus'
 import { useAuth, useCurrentUser } from '../hooks/useAuth'
 import { useSettings } from '../hooks/useSettings'
 import type {
@@ -45,7 +46,6 @@ const themeOptions: { value: ThemePreference; label: string; icon: LucideIcon }[
 
 const currencyOptions: SelectOption<CurrencyCode>[] = [
   { value: 'CAD', label: 'Canadian Dollar (CAD)' },
-
 ]
 
 const weekStartOptions: SelectOption<WeekStart>[] = [
@@ -109,7 +109,7 @@ function AccountCard({ profile, onSaveProfile, onChangeAvatar }: AccountCardProp
             title="Avatar uploads are not available yet"
             aria-label="Change profile photo"
             onClick={onChangeAvatar}
-            className="absolute -right-1 bottom-0 grid size-8 place-items-center rounded-full border-2 border-surface bg-primary text-on-primary"
+            className={`absolute -right-1 bottom-0 grid size-8 place-items-center rounded-full border-2 border-surface bg-primary text-on-primary disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
           >
             <Camera className="size-4" strokeWidth={2} />
           </button>
@@ -241,15 +241,25 @@ interface ManagementRowProps {
   title: string
   description: string
   action: ReactNode
+  /** Inline confirmation shown under the description, e.g. after an email was sent. */
+  status?: string | null
+  /** Muted caption under the description, e.g. "Not available yet". */
+  note?: string
 }
 
-function ManagementRow({ icon, tone, title, description, action }: ManagementRowProps) {
+function ManagementRow({ icon, tone, title, description, action, status, note }: ManagementRowProps) {
   return (
     <li className="flex items-center gap-4 px-3 py-2.5">
       <IconCircle icon={icon} tone={tone} size="sm" />
       <div className="flex-1">
         <p className="text-[15px] font-semibold text-ink">{title}</p>
         <p className="text-[13px] text-muted">{description}</p>
+        {note && <p className="mt-0.5 text-[13px] text-subtle">{note}</p>}
+        {status && (
+          <p role="status" className="mt-1 text-[13px] font-medium text-success">
+            {status}
+          </p>
+        )}
       </div>
       {action}
     </li>
@@ -269,8 +279,15 @@ export function SettingsPage() {
     return toggleNotification(key, enabled)
   }
 
-  function onChangePassword() {
-    void changePassword().then((ok) => { if (ok) window.alert('Password reset email sent. Check your inbox.') })
+  const [passwordStatus, setPasswordStatus] = useState<string | null>(null)
+  const [sendingPasswordReset, setSendingPasswordReset] = useState(false)
+
+  async function onChangePassword() {
+    setPasswordStatus(null)
+    setSendingPasswordReset(true)
+    const sent = await changePassword()
+    setSendingPasswordReset(false)
+    if (sent) setPasswordStatus(`Password reset email sent to ${profile.email}. Check your inbox.`)
   }
 
   function onDeleteAccount() {
@@ -283,8 +300,8 @@ export function SettingsPage() {
 
   return (
     <div>
-      <DataError error={error} />
       <PageHeader title="Settings" subtitle="Manage your account, preferences, and notifications." />
+      <DataError error={error} />
 
       <div className="mt-6 grid grid-cols-2 gap-4">
         <AccountCard profile={profile} onSaveProfile={saveProfile} onChangeAvatar={changeAvatar} />
@@ -307,17 +324,19 @@ export function SettingsPage() {
               tone="quiet"
               title="Change password"
               description="Update your password for better security."
+              status={passwordStatus}
               action={
-                <Button variant="outline" onClick={onChangePassword}>
-                  Change password
+                <Button variant="outline" disabled={sendingPasswordReset} onClick={onChangePassword}>
+                  {sendingPasswordReset ? 'Sending…' : 'Change password'}
                 </Button>
               }
             />
             <ManagementRow
               icon={Trash2}
               tone="danger"
-              title="Delete account (not available yet)"
+              title="Delete account"
               description="Permanently delete your account and all data."
+              note="Not available yet"
               action={
                 <Button variant="danger" disabled onClick={onDeleteAccount}>
                   Delete account

@@ -1,3 +1,5 @@
+import { focusRing } from './focus'
+
 interface ToggleProps {
   disabled?: boolean
   checked: boolean
@@ -14,7 +16,7 @@ export function Toggle({ checked, label, onChange, disabled = false }: TogglePro
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focusRing} ${
         checked ? 'bg-primary' : 'bg-line-strong'
       }`}
     >

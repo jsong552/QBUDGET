@@ -1,7 +1,11 @@
-import { RecordForm } from '../components/RecordForm'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { RecordForm, type RecordField } from '../components/RecordForm'
+import { pageError } from '../lib/errors'
 import { amountToCents } from '../lib/moneyInput'
 import { DataError } from '../components/DataError'
-import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronsUpDown, CirclePlus, Pencil, Search, Trash2, Wallet } from 'lucide-react'
+import { ArrowDown, ArrowUp, CalendarDays, CirclePlus, Pencil, Search, Trash2, Wallet } from 'lucide-react'
+import { DataCell, DataRow, DataTable, type DataColumn } from '../components/DataTable'
+import { IconButton } from '../components/IconButton'
 import { useMemo, useState } from 'react'
 import { Button } from '../components/Button'
 import { Card, CardHeader } from '../components/Card'
@@ -12,7 +16,7 @@ import { StatCard } from '../components/StatCard'
 import { TextField } from '../components/TextField'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useTransactions } from '../hooks/useTransactions'
-import { formatDate, formatMoney, formatMoneyChange } from '../lib/format'
+import { formatDate, formatMoney, formatMoneyChange, localTodayIso } from '../lib/format'
 import type {
   Category,
   CategoryId,
@@ -48,20 +52,13 @@ const periodOptions: SelectOption<TransactionPeriodFilter>[] = [
   { value: 'this_term', label: 'This term' },
 ]
 
-interface Column {
-  key: TransactionSortKey | 'actions'
-  label: string
-  sort: 'range' | 'menu' | null
-  className: string
-}
-
-const columns: Column[] = [
+const columns: DataColumn<TransactionSortKey | 'actions'>[] = [
   { key: 'date', label: 'Date', sort: 'range', className: 'w-[15%]' },
   { key: 'description', label: 'Description', sort: 'menu', className: 'w-[23%]' },
   { key: 'category', label: 'Category', sort: 'menu', className: 'w-[19%]' },
   { key: 'type', label: 'Type', sort: 'menu', className: 'w-[15%]' },
   { key: 'amount', label: 'Amount', sort: 'range', className: 'w-[16%]' },
-  { key: 'actions', label: 'Actions', sort: null, className: '' },
+  { key: 'actions', label: 'Actions' },
 ]
 
 function categoryOptions(categories: Category[]): SelectOption<CategoryId | 'all'>[] {
@@ -71,7 +68,7 @@ function categoryOptions(categories: Category[]): SelectOption<CategoryId | 'all
 interface TransactionRowProps {
   transaction: Transaction
   onEditTransaction: (transaction: Transaction) => void
-  onDeleteTransaction: (transaction: Transaction) => Promise<boolean>
+  onDeleteTransaction: (transaction: Transaction) => void
 }
 
 function TransactionRow({ transaction, onEditTransaction, onDeleteTransaction }: TransactionRowProps) {
@@ -84,57 +81,25 @@ function TransactionRow({ transaction, onEditTransaction, onDeleteTransaction }:
   }
 
   return (
-    <tr className="border-b border-line text-[15px] text-ink">
-      <td className="px-6 py-2.5">{formatDate(transaction.date)}</td>
-      <td className="px-3 py-2.5">{transaction.description}</td>
-      <td className="px-3 py-2.5">
+    <DataRow>
+      <DataCell>{formatDate(transaction.date)}</DataCell>
+      <DataCell>{transaction.description}</DataCell>
+      <DataCell>
         <CategoryBadge category={transaction.category} />
-      </td>
-      <td className="px-3 py-2.5">
+      </DataCell>
+      <DataCell>
         <TransactionTypeBadge type={transaction.type} />
-      </td>
-      <td className={`px-3 py-2.5 font-medium ${transaction.amountCents < 0 ? 'text-danger' : 'text-success'}`}>
+      </DataCell>
+      <DataCell className={`font-medium ${transaction.amountCents < 0 ? 'text-danger' : 'text-success'}`}>
         {formatMoney(transaction.amountCents)}
-      </td>
-      <td className="px-3 py-2.5">
+      </DataCell>
+      <DataCell>
         <div className="flex gap-4">
-          <button
-            type="button"
-            aria-label={`Edit ${transaction.description}`}
-            onClick={onEditClick}
-            className="grid size-10 place-items-center rounded-lg border border-line-strong text-ink hover:bg-surface-muted"
-          >
-            <Pencil className="size-4" strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
-            aria-label={`Delete ${transaction.description}`}
-            onClick={onDeleteClick}
-            className="grid size-10 place-items-center rounded-lg border border-line-strong text-danger hover:bg-danger-soft"
-          >
-            <Trash2 className="size-4" strokeWidth={1.75} />
-          </button>
+          <IconButton icon={Pencil} label={`Edit ${transaction.description}`} onClick={onEditClick} />
+          <IconButton icon={Trash2} label={`Delete ${transaction.description}`} tone="danger" onClick={onDeleteClick} />
         </div>
-      </td>
-    </tr>
-  )
-}
-
-function SortHeader({ column, onSortChange }: { column: Column; onSortChange: (key: TransactionSortKey) => void }) {
-  const { key, sort } = column
-  if (key === 'actions' || sort === null) return <span>{column.label}</span>
-
-  const SortIcon = sort === 'range' ? ChevronsUpDown : ChevronDown
-
-  function onHeaderClick() {
-    if (key !== 'actions') onSortChange(key)
-  }
-
-  return (
-    <button type="button" onClick={onHeaderClick} className="inline-flex items-center gap-1.5 font-medium">
-      {column.label}
-      <SortIcon className="size-3.5" strokeWidth={2.25} />
-    </button>
+      </DataCell>
+    </DataRow>
   )
 }
 
@@ -144,7 +109,8 @@ export function ExpensesPage() {
   const search = useDebouncedValue(searchText, searchDebounceMs)
   const filters = useMemo<TransactionFilters>(() => ({ ...filterChoices, search }), [filterChoices, search])
   const [editing, setEditing] = useState<Transaction | null | undefined>(undefined)
-  const { summary, transactions, categories, error, addTransaction, editTransaction, deleteTransaction } = useTransactions(filters)
+  const [deleting, setDeleting] = useState<Transaction | null>(null)
+  const { summary, transactions, categories, error, mutationError, clearMutationError, addTransaction, editTransaction, deleteTransaction } = useTransactions(filters)
   const editableCategories = editing && !categories?.some((c) => c.id === editing.category.id)
     ? [...(categories ?? []), editing.category] : (categories ?? [])
 
@@ -164,6 +130,10 @@ export function ExpensesPage() {
     setFilters((current) => ({ ...current, period }))
   }
 
+  function onSortTableChange(key: TransactionSortKey | 'actions') {
+    if (key !== 'actions') onSortChange(key)
+  }
+
   function onSortChange(sortBy: TransactionSortKey) {
     setFilters((current) => ({
       ...current,
@@ -173,33 +143,90 @@ export function ExpensesPage() {
   }
 
   function onAddExpense() {
+    clearMutationError()
     setEditing(null)
   }
 
   function onEditTransaction(transaction: Transaction) {
+    clearMutationError()
     setEditing(transaction)
   }
 
-  function onDeleteTransaction(transaction: Transaction) {
-    return window.confirm(`Delete ${transaction.description}?`) ? deleteTransaction(transaction.id) : Promise.resolve(false)
+  function onCloseTransactionForm() {
+    clearMutationError()
+    setEditing(undefined)
   }
+
+  function onSaveTransaction(values: Record<string, string>) {
+    const type = values.type as 'income' | 'expense'
+    const input: TransactionInput = {
+      date: values.date,
+      description: values.description,
+      note: values.note,
+      categoryId: values.categoryId,
+      type,
+      amountCents: amountToCents(values.amount) * (type === 'expense' ? -1 : 1),
+    }
+    return editing ? editTransaction(editing.id, input) : addTransaction(input)
+  }
+
+  function onDeleteTransaction(transaction: Transaction) {
+    clearMutationError()
+    setDeleting(transaction)
+  }
+
+  function onConfirmDeleteTransaction() {
+    return deleting ? deleteTransaction(deleting.id) : false
+  }
+
+  function onCloseDeleteConfirm() {
+    clearMutationError()
+    setDeleting(null)
+  }
+
+  const transactionFields: RecordField[] = [
+    { name: 'date', label: 'Date', type: 'date', half: true },
+    { name: 'amount', label: 'Amount (CAD)', type: 'number', half: true },
+    { name: 'description', label: 'Description / income source' },
+    { name: 'type', label: 'Type', options: [{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }], half: true },
+    { name: 'categoryId', label: 'Category', options: editableCategories.map((c) => ({ value: c.id, label: c.name })), half: true },
+    { name: 'note', label: 'Note (optional)', required: false, maxLength: 1000 },
+  ]
 
   return (
     <div>
-      <DataError error={error} />
       <PageHeader title="Expenses" subtitle="View, add and manage your income and expenses." />
+      <DataError error={pageError(error, mutationError, editing !== undefined || deleting !== null)} />
 
-      {editing !== undefined && <RecordForm title={editing ? 'Edit transaction' : 'Add transaction'} initial={{
-        date: editing?.date ?? new Date().toISOString().slice(0, 10), description: editing?.description ?? '', note: editing?.note ?? '', categoryId: editing?.category.id ?? 'other', type: editing?.type ?? 'expense', amount: editing ? (Math.abs(editing.amountCents) / 100).toFixed(2) : '',
-      }} fields={[
-        { name: 'date', label: 'Date', type: 'date' }, { name: 'description', label: 'Description / income source' }, { name: 'note', label: 'Note (optional)', required: false },
-        { name: 'type', label: 'Type', options: [{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }] },
-        { name: 'categoryId', label: 'Category', options: editableCategories.map((c) => ({ value: c.id, label: c.name })) },
-        { name: 'amount', label: 'Amount (CAD)', type: 'number' },
-      ]} onClose={() => setEditing(undefined)} onSave={(values) => {
-        const input: TransactionInput = { date: values.date, description: values.description, note: values.note, categoryId: values.categoryId, type: values.type as 'income' | 'expense', amountCents: amountToCents(values.amount) * (values.type === 'expense' ? -1 : 1) }
-        return editing ? editTransaction(editing.id, input) : addTransaction(input)
-      }} />}
+      {editing !== undefined && (
+        <RecordForm
+          title={editing ? 'Edit transaction' : 'Add transaction'}
+          initial={{
+            date: editing?.date ?? localTodayIso(),
+            description: editing?.description ?? '',
+            note: editing?.note ?? '',
+            categoryId: editing?.category.id ?? 'other',
+            type: editing?.type ?? 'expense',
+            amount: editing ? (Math.abs(editing.amountCents) / 100).toFixed(2) : '',
+          }}
+          fields={transactionFields}
+          error={mutationError}
+          onClose={onCloseTransactionForm}
+          onSave={onSaveTransaction}
+        />
+      )}
+      {deleting && (
+        <ConfirmDialog
+          title="Delete transaction?"
+          message={`"${deleting.description}" will be removed from your history. This cannot be undone.`}
+          confirmLabel="Delete"
+          busyLabel="Deleting…"
+          variant="danger"
+          error={mutationError}
+          onConfirm={onConfirmDeleteTransaction}
+          onClose={onCloseDeleteConfirm}
+        />
+      )}
       {summary && (
         <div className="mt-6 grid grid-cols-3 gap-5">
           <StatCard
@@ -269,28 +296,24 @@ export function ExpensesPage() {
           <Select label="Period" value={filters.period} options={periodOptions} onChange={onPeriodFilterChange} icon={CalendarDays} className="w-48" />
         </div>
 
-        <table className="mt-5 w-full table-fixed">
-          <thead>
-            <tr className="bg-surface-muted text-left text-sm text-ink">
-              {columns.map((column, i) => (
-                <th key={column.key} className={`py-3 font-medium ${i === 0 ? 'rounded-l-lg px-6' : 'px-3'} ${column.className}`}>
-                  <SortHeader column={column} onSortChange={onSortChange} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {transactions?.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-muted">No transactions yet. Add income or an expense to get started.</td></tr>}
-            {transactions?.map((transaction) => (
-              <TransactionRow
-                key={transaction.id}
-                transaction={transaction}
-                onEditTransaction={onEditTransaction}
-                onDeleteTransaction={onDeleteTransaction}
-              />
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          columns={columns}
+          onSortChange={onSortTableChange}
+          loading={!transactions && !error}
+          failed={!transactions && Boolean(error)}
+          empty={transactions?.length === 0}
+          emptyMessage="No transactions yet. Add income or an expense to get started."
+          className="mt-5"
+        >
+          {transactions?.map((transaction) => (
+            <TransactionRow
+              key={transaction.id}
+              transaction={transaction}
+              onEditTransaction={onEditTransaction}
+              onDeleteTransaction={onDeleteTransaction}
+            />
+          ))}
+        </DataTable>
       </Card>
     </div>
   )
