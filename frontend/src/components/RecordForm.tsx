@@ -19,11 +19,16 @@ export interface RecordField {
   /** Text fields only. Defaults to 200. */
   maxLength?: number
   placeholder?: string
+  /** Muted helper text under the field. */
+  hint?: string
 }
+
+type FormValues = Record<string, string>
 
 interface RecordFormProps {
   title: string
-  fields: RecordField[]
+  /** A list, or a function of the current values when options or limits depend on another field. */
+  fields: RecordField[] | ((values: FormValues) => RecordField[])
   initial: Record<string, string>
   /** Resolve to false (or throw) to keep the form open and show an error. */
   onSave: (values: Record<string, string>) => Promise<boolean>
@@ -33,11 +38,13 @@ interface RecordFormProps {
   error?: unknown
   /** Body of the delete confirmation. */
   deleteMessage?: string
+  /** Adjusts the values after a field changes, e.g. resets a category that the new type does not allow. */
+  onValuesChange?: (values: FormValues, changedField: string) => FormValues
 }
 
 const defaultMaxLength = 200
 
-export function RecordForm({ title, fields, initial, onSave, onClose, onDelete, error, deleteMessage = 'This cannot be undone.' }: RecordFormProps) {
+export function RecordForm({ title, fields, initial, onSave, onClose, onDelete, error, deleteMessage = 'This cannot be undone.', onValuesChange }: RecordFormProps) {
   const [values, setValues] = useState(initial)
   const [busy, setBusy] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
@@ -45,8 +52,13 @@ export function RecordForm({ title, fields, initial, onSave, onClose, onDelete, 
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   function onFieldChange(name: string, value: string) {
-    setValues((current) => ({ ...current, [name]: value }))
+    setValues((current) => {
+      const next = { ...current, [name]: value }
+      return onValuesChange ? onValuesChange(next, name) : next
+    })
   }
+
+  const visibleFields = typeof fields === 'function' ? fields(values) : fields
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -84,7 +96,7 @@ export function RecordForm({ title, fields, initial, onSave, onClose, onDelete, 
     <Modal title={title} onClose={onClose} busy={busy || confirmingDelete}>
       <form onSubmit={onSubmit} className="mt-5">
         <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-          {fields.map((field) => (
+          {visibleFields.map((field) => (
             <div key={field.name} className={field.half ? 'col-span-1' : 'col-span-2'}>
               {field.options ? (
                 <Select
@@ -111,6 +123,7 @@ export function RecordForm({ title, fields, initial, onSave, onClose, onDelete, 
                   onValueChange={(value) => onFieldChange(field.name, value)}
                 />
               )}
+              {field.hint && <p className="mt-1.5 text-[13px] text-muted">{field.hint}</p>}
             </div>
           ))}
         </div>
