@@ -400,6 +400,89 @@ int main() {
         CalendarEvent paidCreate{"", "New paid", "other", Date("2026-11-08"), 500, true, true};
         fails(400, [&] { call(calendarDb, "POST", "/api/calendar/events", Json(paidCreate)); });
         }
+        // Cross-PR regression: recurrence validation, calendar payments and budgets share one ledger.
+        {
+            MemoryStore integrated;
+            RecurringRepository schedules(integrated);
+            TransactionRepository entries(integrated);
+            CategoryRepository catalogueRepo(integrated);
+            CategoryService catalogue(catalogueRepo);
+            RecurrenceService service(schedules, entries, catalogue);
+            RecurringEntry bill{"", "  Weekly bill  ", "other", TransactionType::Expense, -2500,
+                                Date("2026-11-08"), std::nullopt, RecurrenceFrequency::Weekly, true};
+            call(integrated, "POST", "/api/recurring", Json(bill));
+            auto saved = schedules.list().front();
+            check(saved.description == "Weekly bill", "Recurring API trims descriptions after calendar merge");
+            auto invalid = bill;
+            invalid.categoryId = "income";
+            fails(400, [&] { call(integrated, "POST", "/api/recurring", Json(invalid)); });
+            invalid = bill;
+            invalid.description = "   ";
+            fails(400, [&] { call(integrated, "PUT", "/api/recurring/" + saved.id, Json(invalid)); });
+            fails(404, [&] { call(integrated, "DELETE", "/api/recurring/missing"); });
+            invalid = bill;
+            invalid.startDate = Date("2000-01-01");
+            fails(400, [&] { call(integrated, "POST", "/api/recurring", Json(invalid)); });
+            invalid.active = false;
+            call(integrated, "POST", "/api/recurring", Json(invalid));
+            check(schedules.list().size() == 2, "Old schedules may still be saved while paused");
+            // Simulate an old stored schedule: sync must continue processing valid schedules.
+            invalid.active = true;
+            schedules.add(invalid);
+            call(integrated, "PUT", "/api/budgets",
+                 {{"categoryId", "other"}, {"period", "monthly"}, {"amountCents", 2000}});
+            Json payment = {{"source", "recurring"}, {"sourceId", saved.id},
+                            {"date", "2026-11-08"}, {"paidDate", "2026-11-08"}};
+            call(integrated, "POST", "/api/calendar/pay", payment);
+            check(call(integrated, "POST", "/api/recurring/sync")["created"] == 0,
+                  "Sync skips oversized schedules and does not duplicate calendar payments");
+            bill.description = "Another bill";
+            service.create(bill);
+            check(call(integrated, "POST", "/api/recurring/sync")["created"] == 1,
+                  "An oversized schedule does not block a valid unpaid schedule");
+            check(entries.list().size() == 2, "Each paid recurring occurrence has one ledger record");
+            auto limits = call(integrated, "GET", "/api/budgets")["summaries"];
+            check(limits[0]["spentCents"] == 5000 && limits[0]["overBudget"] == true,
+                  "Calendar and synced payments both count toward category budgets");
+            auto ordered = service.list();
+            check(ordered[2].description == "Another bill" && ordered[3].description == "Weekly bill",
+                  "Recurring ordering survives calendar service integration");
+            call(integrated, "DELETE", "/api/recurring/" + saved.id);
+            check(entries.list().size() == 2, "Deleting a schedule preserves recorded payments");
+        }
+        // Frontend dropdown keys must select the rates exposed by the backend API.
+        {
+            MemoryStore planning;
+            SemesterPlan value;
+            value.startDate = Date("2026-09-01");
+            value.endDate = Date("2027-01-01");
+            value.courseCount = 5;
+            auto rates = call(planning, "GET", "/api/semester/rates");
+            for (const auto &program : rates["programs"])
+                for (const auto &residency : rates["residencies"]) {
+                    value.faculty = program["key"].get<std::string>();
+                    value.studentStatus = residency["key"].get<std::string>();
+                    call(planning, "PUT", "/api/semester", Json(value));
+                    auto result = call(planning, "GET", "/api/semester")["summary"];
+                    auto rate = program["perUnitCents"][value.studentStatus];
+                    auto expected = rate.is_null() ? MoneyCents{0} : rate.get<MoneyCents>() * 3;
+                    check(result["tuitionPerCourseCents"] == expected &&
+                              result["estimatedTuitionCents"] == expected * 5 &&
+                              result["tuitionRateSource"] == (rate.is_null() ? "none" : "estimate"),
+                          "Every dropdown program/residency pair agrees with the tuition summary");
+                }
+            value.tuitionPerCourseCents = 12345;
+            value.additionalFeesCents = 100;
+            call(planning, "PUT", "/api/semester", Json(value));
+            auto result = call(planning, "GET", "/api/semester")["summary"];
+            check(result["tuitionRateSource"] == "entered" && result["estimatedTuitionCents"] == 61825,
+                  "Entered tuition overrides estimates and includes additional fees");
+            value.endDate = value.startDate;
+            fails(400, [&] { call(planning, "PUT", "/api/semester", Json(value)); });
+            value.endDate = Date("2027-01-01");
+            value.courseCount = 31;
+            fails(400, [&] { call(planning, "PUT", "/api/semester", Json(value)); });
+        }
         std::cout << checks << " backend checks passed.\n";
         return 0;
     } catch (const std::exception &error) {

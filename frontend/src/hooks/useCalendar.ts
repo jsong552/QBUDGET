@@ -14,6 +14,7 @@ import {
 import type { CalendarEventInput, CalendarView, IsoDate, ReminderSettings } from '../types'
 import { useAsync } from './useAsync'
 import { useMutation } from './useMutation'
+import { useReloadOnGeneratedTransactions } from './useReloadOnGeneratedTransactions'
 
 /** `month` is an anchor date in the requested month/week, or null for today. */
 export function useCalendar(month: IsoDate | null, view: CalendarView) {
@@ -37,6 +38,8 @@ export function useCalendar(month: IsoDate | null, view: CalendarView) {
     reloadMonth()
     reloadUpcoming()
   }, [reloadSummary, reloadMonth, reloadUpcoming])
+  // AppLayout syncs in the background; a direct calendar visit may load before it finishes.
+  useReloadOnGeneratedTransactions(reloadAfterChange)
 
   const addEvent = useCallback(
     (input: CalendarEventInput) => run(() => createEvent(input), { onSuccess: reloadAfterChange }),
