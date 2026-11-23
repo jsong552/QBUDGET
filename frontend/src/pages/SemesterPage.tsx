@@ -10,19 +10,87 @@ import { IconButton } from '../components/IconButton'
 import { StatCard } from '../components/StatCard'
 import { StatusBadge } from '../components/StatusBadge'
 import { RecordForm, type RecordField } from '../components/RecordForm'
+import { focusRing } from '../components/focus'
 import { pageError } from '../lib/errors'
-import { amountToCents } from '../lib/moneyInput'
+import { amountToCents, optionalAmountToCents } from '../lib/moneyInput'
+import { matchRateOption, notSetChoice, otherChoice, planChoiceValue, publishedRate, rateOptionLabel } from '../lib/semesterPlan'
 import { formatDate, formatDateRange, formatLabel, formatMoney, localTodayIso } from '../lib/format'
-import type { Bursary, SemesterPlan, SemesterSummary, StudentFee } from '../types/planning'
+import type { Bursary, SemesterPlan, SemesterSummary, StudentFee, TuitionRates } from '../types/planning'
 const nonnegative = (value: string) => value === '0' || value === '0.00' ? 0 : amountToCents(value)
 
-const planFields: RecordField[] = [
-  { name: 'startDate', label: 'Start date', type: 'date', half: true }, { name: 'endDate', label: 'End date (exclusive)', type: 'date', half: true },
-  { name: 'income', label: 'Expected income excluding bursaries (CAD)', type: 'number', min: '0' },
-  { name: 'faculty', label: 'Faculty / program (optional)', required: false, maxLength: 100, half: true }, { name: 'studentStatus', label: 'Student status (optional)', required: false, maxLength: 100, half: true },
-  { name: 'courseCount', label: 'Course count (0-30)', type: 'number', min: '0', step: '1', half: true }, { name: 'rate', label: 'Tuition per course (CAD, enter your rate)', type: 'number', min: '0', half: true },
-  { name: 'fees', label: 'Additional tuition fees (CAD)', type: 'number', min: '0' },
-]
+const studentStatusHint = 'Ontario, out of province or international'
+const estimateRateHint = 'Leave blank to use the Queen\u2019s estimate.'
+const noPublishedRateHint = 'No published rate for this combination \u2014 enter your own.'
+
+/**
+ * Plan form fields. With rates, faculty and student status are selects fed by /semester/rates (an "Other" choice
+ * reveals free text); without them (still loading or failed) they stay free text.
+ */
+function planFieldsFor(values: Record<string, string>, rates: TuitionRates | null): RecordField[] {
+  const choiceFields: RecordField[] = rates
+    ? [
+        {
+          name: 'facultyChoice', label: 'Faculty / program', half: true,
+          options: [{ value: notSetChoice, label: 'Not set' }, ...rates.programs.map((p) => ({ value: p.key, label: p.label })), { value: otherChoice, label: 'Other' }],
+        },
+        {
+          name: 'statusChoice', label: 'Student status', half: true, hint: studentStatusHint,
+          options: [{ value: notSetChoice, label: 'Not set' }, ...rates.residencies.map((r) => ({ value: r.key, label: r.label })), { value: otherChoice, label: 'Other' }],
+        },
+        ...(values.facultyChoice === otherChoice ? [{ name: 'facultyOther', label: 'Your faculty / program', maxLength: 100 }] : []),
+        ...(values.statusChoice === otherChoice ? [{ name: 'statusOther', label: 'Your student status', maxLength: 100 }] : []),
+      ]
+    : [
+        { name: 'facultyOther', label: 'Faculty / program', required: false, maxLength: 100, half: true },
+        { name: 'statusOther', label: 'Student status', required: false, maxLength: 100, half: true, hint: studentStatusHint },
+      ]
+  const rate = rates ? publishedRate(rates, values.facultyChoice, values.statusChoice) : undefined
+  return [
+    { name: 'startDate', label: 'Start date', type: 'date', half: true }, { name: 'endDate', label: 'End date (exclusive)', type: 'date', half: true },
+    ...choiceFields,
+    { name: 'income', label: 'Expected income excluding bursaries (CAD)', type: 'number', min: '0' },
+    { name: 'courseCount', label: 'Course count (0-30)', type: 'number', min: '0', step: '1', half: true },
+    {
+      name: 'rate', label: 'Tuition per course (CAD)', type: 'number', min: '0', required: false, half: true,
+      hint: rate === null ? noPublishedRateHint : estimateRateHint,
+    },
+    { name: 'fees', label: 'Additional tuition fees (CAD)', type: 'number', min: '0' },
+  ]
+}
+
+/** Form values for a stored plan; a faculty or status that is not in the rates table pre-selects "Other" with its text. */
+function planInitialValues(plan: SemesterPlan, rates: TuitionRates | null): Record<string, string> {
+  const faculty = rates ? matchRateOption(plan.faculty, rates.programs) : { choice: otherChoice, other: plan.faculty }
+  const status = rates ? matchRateOption(plan.studentStatus, rates.residencies) : { choice: otherChoice, other: plan.studentStatus }
+  return {
+    startDate: plan.startDate, endDate: plan.endDate, income: (plan.expectedIncomeCents / 100).toFixed(2),
+    facultyChoice: faculty.choice, facultyOther: faculty.other, statusChoice: status.choice, statusOther: status.other,
+    courseCount: String(plan.courseCount), rate: plan.tuitionPerCourseCents ? (plan.tuitionPerCourseCents / 100).toFixed(2) : '',
+    fees: (plan.additionalFeesCents / 100).toFixed(2),
+  }
+}
+
+function TuitionCaption({ summary, rates }: { summary: SemesterSummary; rates: TuitionRates | undefined }) {
+  const rate = formatMoney(summary.tuitionPerCourseCents)
+  if (summary.tuitionRateSource === 'entered') return <>Your rate: {rate} per course</>
+  if (summary.tuitionRateSource === 'estimate') {
+    const units = rates ? ` (${rates.unitsPerCourse} units)` : ''
+    return (
+      <>
+        Queen&rsquo;s {rates?.academicYear ? `${rates.academicYear} ` : ''}estimate: {rate} per course{units}. Tuition only &mdash; excludes student fees and health insurance.
+        {rates?.source && (
+          <>
+            {' '}
+            <a href={rates.source} target="_blank" rel="noopener noreferrer" className={`rounded font-medium text-primary hover:underline ${focusRing}`}>
+              Source
+            </a>
+          </>
+        )}
+      </>
+    )
+  }
+  return <>Choose a faculty and student status, or enter a rate.</>
+}
 
 const bursaryFields: RecordField[] = [
   { name: 'name', label: 'Name' }, { name: 'amount', label: 'Amount (CAD)', type: 'number', half: true },
@@ -49,12 +117,12 @@ const feeColumns: DataColumn[] = [
   { key: 'actions', label: 'Actions' },
 ]
 
-function SemesterStats({ summary }: { summary: SemesterSummary }) {
+function SemesterStats({ summary, rates }: { summary: SemesterSummary; rates: TuitionRates | undefined }) {
   return (
     <>
       <div className="mt-6 grid grid-cols-3 gap-5">
         <StatCard tone="success" icon={ArrowUp} label="Expected income" value={formatMoney(summary.expectedIncomeCents)} caption="Includes approved bursaries" />
-        <StatCard tone="primary" icon={GraduationCap} label="Estimated tuition" value={formatMoney(summary.estimatedTuitionCents)} caption="Courses x your per-course rate" />
+        <StatCard tone="primary" icon={GraduationCap} label="Estimated tuition" value={formatMoney(summary.estimatedTuitionCents)} caption={<TuitionCaption summary={summary} rates={rates} />} />
         <StatCard tone="danger" icon={ArrowDown} label="Planned costs" value={formatMoney(summary.plannedCostsCents)} caption="Tuition, payments and kept fees" />
       </div>
       <div className="mt-5 grid grid-cols-3 gap-5">
@@ -81,7 +149,20 @@ function PlanDetail({ label, value }: { label: string; value: string }) {
   )
 }
 
-function PlanCard({ plan, onEditPlan }: { plan: SemesterPlan; onEditPlan: () => void }) {
+interface PlanCardProps {
+  summary: SemesterSummary
+  rates: TuitionRates | undefined
+  onEditPlan: () => void
+}
+
+function tuitionRateLabel(summary: SemesterSummary): string {
+  if (summary.tuitionRateSource === 'none') return ''
+  const rate = formatMoney(summary.tuitionPerCourseCents)
+  return summary.tuitionRateSource === 'estimate' ? `${rate} (estimate)` : rate
+}
+
+function PlanCard({ summary, rates, onEditPlan }: PlanCardProps) {
+  const plan = summary.plan
   return (
     <Card className="mt-5 px-8 pt-5 pb-6">
       <CardHeader
@@ -95,15 +176,16 @@ function PlanCard({ plan, onEditPlan }: { plan: SemesterPlan; onEditPlan: () => 
         }
       />
       <dl className="mt-5 grid grid-cols-3 gap-x-6 gap-y-4">
-        <PlanDetail label="Faculty / program" value={plan.faculty} />
-        <PlanDetail label="Student status" value={plan.studentStatus} />
+        <PlanDetail label="Faculty / program" value={rateOptionLabel(plan.faculty, rates?.programs)} />
+        <PlanDetail label="Student status" value={rateOptionLabel(plan.studentStatus, rates?.residencies)} />
         <PlanDetail label="Courses" value={String(plan.courseCount)} />
-        <PlanDetail label="Tuition per course" value={formatMoney(plan.tuitionPerCourseCents)} />
+        <PlanDetail label="Tuition per course" value={tuitionRateLabel(summary)} />
         <PlanDetail label="Additional tuition fees" value={formatMoney(plan.additionalFeesCents)} />
         <PlanDetail label="Expected income excluding bursaries" value={formatMoney(plan.expectedIncomeCents)} />
       </dl>
       <p className="mt-5 text-sm text-muted">
-        Estimated from your semester plan. Approved bursaries count as income; record received bursaries as transactions.
+        Tuition is estimated from your faculty and student status using Queen&rsquo;s published rates, unless you enter your own
+        per-course rate. Approved bursaries count as income; record received bursaries as transactions.
       </p>
     </Card>
   )
@@ -149,8 +231,10 @@ function FeeRow({ fee, onEditFee }: { fee: StudentFee; onEditFee: (fee: StudentF
 }
 
 export function SemesterPage() {
-  const { data, error, mutationError, clearMutationError, savePlan, saveBursary, removeBursary, saveFee, removeFee } = useSemester()
+  const { data, error, mutationError, clearMutationError, rates, savePlan, saveBursary, removeBursary, saveFee, removeFee } = useSemester()
   const [planForm, setPlanForm] = useState(false)
+  /** Rates as they were when the plan form opened, so the form does not switch between selects and text while open. */
+  const [formRates, setFormRates] = useState<TuitionRates | null>(null)
   const [bursary, setBursary] = useState<Bursary | null | undefined>()
   const [fee, setFee] = useState<StudentFee | null | undefined>()
   const plan = data?.summary.plan
@@ -158,7 +242,12 @@ export function SemesterPage() {
 
   function onEditPlan() {
     clearMutationError()
+    setFormRates(rates ?? null)
     setPlanForm(true)
+  }
+
+  function planFormFields(values: Record<string, string>) {
+    return planFieldsFor(values, formRates)
   }
 
   function onClosePlanForm() {
@@ -167,7 +256,11 @@ export function SemesterPage() {
   }
 
   function onSavePlan(v: Record<string, string>) {
-    return savePlan({ startDate: v.startDate, endDate: v.endDate, expectedIncomeCents: nonnegative(v.income), faculty: v.faculty, studentStatus: v.studentStatus, courseCount: Number(v.courseCount), tuitionPerCourseCents: nonnegative(v.rate), additionalFeesCents: nonnegative(v.fees) })
+    // Without rates the form only has the free-text fields, whose values are stored under the "Other" names.
+    const faculty = formRates ? planChoiceValue(v.facultyChoice, v.facultyOther) : v.facultyOther.trim()
+    const studentStatus = formRates ? planChoiceValue(v.statusChoice, v.statusOther) : v.statusOther.trim()
+    // A blank or zero rate is sent as 0, which tells the API to use its estimate.
+    return savePlan({ startDate: v.startDate, endDate: v.endDate, expectedIncomeCents: nonnegative(v.income), faculty, studentStatus, courseCount: Number(v.courseCount), tuitionPerCourseCents: optionalAmountToCents(v.rate), additionalFeesCents: nonnegative(v.fees) })
   }
 
   function onOpenBursary(row: Bursary | null) {
@@ -224,10 +317,10 @@ export function SemesterPage() {
           <p className="text-sm text-muted">Loading your semester plan…</p>
         </Card>
       )}
-      {data && <SemesterStats summary={data.summary} />}
-      {plan && <PlanCard plan={plan} onEditPlan={onEditPlan} />}
+      {data && <SemesterStats summary={data.summary} rates={rates} />}
+      {data && <PlanCard summary={data.summary} rates={rates} onEditPlan={onEditPlan} />}
 
-      {planForm && plan && <RecordForm title="Semester plan" initial={{ startDate: plan.startDate, endDate: plan.endDate, income: (plan.expectedIncomeCents / 100).toFixed(2), faculty: plan.faculty, studentStatus: plan.studentStatus, courseCount: String(plan.courseCount), rate: (plan.tuitionPerCourseCents / 100).toFixed(2), fees: (plan.additionalFeesCents / 100).toFixed(2) }} fields={planFields} error={mutationError} onClose={onClosePlanForm} onSave={onSavePlan} />}
+      {planForm && plan && <RecordForm title="Semester plan" initial={planInitialValues(plan, formRates)} fields={planFormFields} error={mutationError} onClose={onClosePlanForm} onSave={onSavePlan} />}
       <Card className="mt-5 px-4 pt-5 pb-1">
         <div className="px-4">
           <CardHeader

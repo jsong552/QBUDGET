@@ -8,5 +8,29 @@ export interface RecurringEntry { id: string; description: string; categoryId: s
 export interface Bursary { id: string; name: string; amountCents: number; status: 'applied' | 'approved' | 'received' }
 export interface StudentFee { id: string; name: string; amountCents: number; deadline: string; status: 'kept' | 'opted_out' }
 export interface SemesterPlan { startDate: string; endDate: string; expectedIncomeCents: number; faculty: string; studentStatus: string; courseCount: number; tuitionPerCourseCents: number; additionalFeesCents: number }
-export interface SemesterSummary { plan: SemesterPlan; estimatedTuitionCents: number; scheduledCostsCents: number; expectedIncomeCents: number; plannedCostsCents: number; remainingCents: number; optedOutSavingsCents: number }
+/** Where the per-course rate behind estimatedTuitionCents came from: the student's own, the Queen's table, or nothing usable. */
+export type TuitionRateSource = 'entered' | 'estimate' | 'none'
+export interface SemesterSummary {
+  plan: SemesterPlan; estimatedTuitionCents: number; scheduledCostsCents: number; expectedIncomeCents: number; plannedCostsCents: number; remainingCents: number; optedOutSavingsCents: number
+  /** The per-course rate actually used (entered or estimated); 0 when none. */
+  tuitionPerCourseCents: number
+  tuitionRateSource: TuitionRateSource
+}
 export interface SemesterData { summary: SemesterSummary; bursaries: Bursary[]; fees: StudentFee[] }
+/** Residency keys used by GET /semester/rates. */
+export type ResidencyKey = 'ontario' | 'out_of_province' | 'international' | (string & {})
+export interface TuitionProgram {
+  key: string
+  label: string
+  /** Per-unit tuition by residency key; null where no single published rate exists. */
+  perUnitCents: Record<ResidencyKey, number | null>
+}
+export interface TuitionRates {
+  /** e.g. "2026-2027". */
+  academicYear: string
+  /** Page the rates were copied from. */
+  source: string
+  unitsPerCourse: number
+  programs: TuitionProgram[]
+  residencies: { key: ResidencyKey; label: string }[]
+}

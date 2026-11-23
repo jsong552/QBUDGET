@@ -5,3 +5,10 @@ export function amountToCents(value: string): number {
   if (!Number.isSafeInteger(cents) || cents <= 0 || cents > 100000000000) throw new Error('Enter a valid positive amount.')
   return cents
 }
+
+/** For optional amounts where blank or zero is meaningful (e.g. "use the estimate"): "", "0" and "0.00" give 0. */
+export function optionalAmountToCents(value: string): number {
+  const trimmed = value.trim()
+  if (trimmed === '' || /^0+(\.0{1,2})?$/.test(trimmed)) return 0
+  return amountToCents(trimmed)
+}

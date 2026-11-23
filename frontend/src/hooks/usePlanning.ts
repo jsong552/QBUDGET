@@ -54,9 +54,13 @@ export function useRecurring() {
 }
 export function useSemester() {
   const resource = useAsync(service.getSemester)
+  // Loaded once with the page. A failure only means the plan form falls back to free-text fields, so it is not a page error.
+  const rates = useAsync(service.getTuitionRates)
   const { run, error: mutationError, clearError: clearMutationError } = useMutation()
   const write = useCallback((action: () => Promise<unknown>) => run(action, { onSuccess: resource.reload }), [run, resource.reload])
   return { data: resource.data, error: resource.error ?? mutationError, mutationError, clearMutationError,
+    /** Tuition rates, or undefined while loading or when they could not be loaded. */
+    rates: rates.data,
     savePlan: (v: SemesterPlan) => write(() => service.saveSemester(v)),
     saveBursary: (id: string | null, v: Omit<Bursary, 'id'>) => write(() => service.saveBursary(id, v)), removeBursary: (id: string) => write(() => service.deleteBursary(id)),
     saveFee: (id: string | null, v: Omit<StudentFee, 'id'>) => write(() => service.saveFee(id, v)), removeFee: (id: string) => write(() => service.deleteFee(id)) }
