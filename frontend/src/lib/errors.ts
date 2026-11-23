@@ -34,3 +34,8 @@ export function errorMessage(error: unknown): string {
 export function pageError(error: unknown, formError: unknown, formOpen: boolean): unknown {
   return formOpen && error === formError ? null : error
 }
+
+/** True when the API answered 404: the item was already removed. */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404
+}
