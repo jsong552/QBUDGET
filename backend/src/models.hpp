@@ -127,6 +127,10 @@ struct SemesterSummary {
     SemesterPlan plan;
     MoneyCents estimatedTuitionCents, scheduledCostsCents, expectedIncomeCents, plannedCostsCents,
         remainingCents, optedOutSavingsCents;
+    // Rate behind estimatedTuitionCents: "entered" (the student's own), "estimate" (built-in table) or
+    // "none".
+    MoneyCents tuitionPerCourseCents = 0;
+    std::string tuitionRateSource = "none";
 };
 struct ForecastMonth {
     Date month;

@@ -61,4 +61,14 @@ inline void validateRecord(const StudentFee &v) {
     validAmount(v.amountCents, true);
     require(v.status == FeeStatus::Kept || v.status == FeeStatus::OptedOut, "Invalid fee status.");
 }
+// Mirrors the JSON codec so a plan is checked the same way whether it arrives over HTTP or from a service
+// call.
+inline void validateRecord(const SemesterPlan &v) {
+    require(v.startDate < v.endDate, "Semester end must follow its start.");
+    require(v.courseCount >= 0 && v.courseCount <= 30, "Course count must be 0 to 30.");
+    for (auto amount : {v.expectedIncomeCents, v.tuitionPerCourseCents, v.additionalFeesCents})
+        require(amount >= 0 && amount <= maxRecordCents,
+                "Plan amounts must be zero or more and within the supported range.");
+    require(v.faculty.size() <= 100 && v.studentStatus.size() <= 100, "Student details are too long.");
+}
 } // namespace qbudget
