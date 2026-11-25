@@ -3,6 +3,7 @@ import indexHtml from '../../index.html?raw'
 import {
   applyTheme,
   defaultThemePreference,
+  forgetStoredTheme,
   isThemePreference,
   readStoredTheme,
   resolveTheme,
@@ -46,6 +47,9 @@ function memoryStorage(initial: Record<string, string> = {}) {
     setItem: (key: string, value: string) => {
       values.set(key, value)
     },
+    removeItem: (key: string) => {
+      values.delete(key)
+    },
   }
 }
 
@@ -54,6 +58,9 @@ const blockedStorage = {
     throw new Error('SecurityError: storage is disabled')
   },
   setItem: () => {
+    throw new Error('SecurityError: storage is disabled')
+  },
+  removeItem: () => {
     throw new Error('SecurityError: storage is disabled')
   },
 }
@@ -133,6 +140,16 @@ describe('theme remembered on this device', () => {
     vi.stubGlobal('localStorage', undefined)
     expect(readStoredTheme()).toBeNull()
     expect(() => storeTheme('dark')).not.toThrow()
+  })
+
+  it('can forget the theme (after the account is deleted)', () => {
+    const storage = memoryStorage({ [themeStorageKey]: 'dark', other: 'kept' })
+    vi.stubGlobal('localStorage', storage)
+    forgetStoredTheme()
+    expect(readStoredTheme()).toBeNull()
+    expect(storage.values.get('other')).toBe('kept')
+    vi.stubGlobal('localStorage', blockedStorage)
+    expect(() => forgetStoredTheme()).not.toThrow()
   })
 })
 

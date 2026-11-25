@@ -1,6 +1,8 @@
 import { useCallback } from 'react'
+import { forgetStoredDateFormat } from '../lib/dateFormat'
+import { forgetStoredTheme } from '../lib/theme'
 import {
-  deleteAccount,
+  deleteAccount as deleteAccountAndData,
   getNotificationPreferences,
   requestPasswordChange,
   updateDisplayPreferences,
@@ -19,7 +21,7 @@ import { useMutation } from './useMutation'
  * Display preferences are the app-wide copy (see DisplayPreferencesProvider), so a new theme shows on every page at once.
  */
 export function useSettings() {
-  const { updateUser } = useAuth()
+  const { updateUser, signOut } = useAuth()
   const display = useDisplayPreferences()
   const notifications = useAsync(getNotificationPreferences)
   const { run, error: mutationError } = useMutation()
@@ -57,7 +59,19 @@ export function useSettings() {
 
   const changePassword = useCallback(() => run(requestPasswordChange), [run])
 
-  const removeAccount = useCallback(() => run(deleteAccount), [run])
+  /**
+   * Deletes the account and all its data, forgets this device's theme and date format, then signs out.
+   * Rejects with a message for the dialog if the password is wrong or the deletion fails (it can then be retried).
+   */
+  const deleteAccount = useCallback(
+    async (password: string) => {
+      await deleteAccountAndData(password)
+      forgetStoredTheme()
+      forgetStoredDateFormat()
+      await signOut()
+    },
+    [signOut],
+  )
 
   return {
     display: display.data,
@@ -68,6 +82,6 @@ export function useSettings() {
     changeDisplay,
     toggleNotification,
     changePassword,
-    removeAccount,
+    deleteAccount,
   }
 }

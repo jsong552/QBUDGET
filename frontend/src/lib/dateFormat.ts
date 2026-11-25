@@ -37,6 +37,15 @@ export function readStoredDateFormat(): DateFormatPreference | null {
   }
 }
 
+/** Forgets the date format remembered on this device (e.g. after the account is deleted). */
+export function forgetStoredDateFormat(): void {
+  try {
+    localStorage.removeItem(dateFormatStorageKey)
+  } catch {
+    /* Storage may be blocked; then nothing was remembered anyway. */
+  }
+}
+
 /** Remembers the date format on this device, so the next page load shows it before the account's preferences load. */
 export function storeDateFormat(format: DateFormatPreference): void {
   try {

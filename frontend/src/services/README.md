@@ -8,8 +8,10 @@ See `docs/firestore-setup.md` for setup, data conventions, limits and testing.
 `src/types/index.ts` and `src/types/planning.ts` describe JSON responses. The C++ API validates input,
 calculates summaries, and uses Firestore REST with the user's verified identity.
 
-No production service imports mock data. Avatar upload and account deletion
-remain unavailable; password reset uses Firebase's real reset-email operation.
+No production service imports mock data. Avatar upload remains unavailable;
+password reset uses Firebase's real reset-email operation. Account deletion asks
+for the password again (Firebase requires a fresh sign-in), then calls
+`DELETE /api/me`, which removes all of the user's data and their sign-in.
 Notifications are computed from scheduled payments, category budget overruns and saved preferences.
 Dashboard, transaction and forecast hooks use bundled reads. Planning services
 cover category budgets, recurring schedules, semester estimates, bursaries and fees.

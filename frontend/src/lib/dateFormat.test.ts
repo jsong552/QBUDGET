@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   dateFormatStorageKey,
   defaultDateFormat,
+  forgetStoredDateFormat,
   getDateFormat,
   isDateFormatPreference,
   readStoredDateFormat,
@@ -22,6 +23,9 @@ function memoryStorage(initial: Record<string, string> = {}) {
     setItem: (key: string, value: string) => {
       values.set(key, value)
     },
+    removeItem: (key: string) => {
+      values.delete(key)
+    },
   }
 }
 
@@ -30,6 +34,9 @@ const blockedStorage = {
     throw new Error('SecurityError: storage is disabled')
   },
   setItem: () => {
+    throw new Error('SecurityError: storage is disabled')
+  },
+  removeItem: () => {
     throw new Error('SecurityError: storage is disabled')
   },
 }
@@ -76,5 +83,15 @@ describe('date format remembered on this device', () => {
     vi.stubGlobal('localStorage', undefined)
     expect(readStoredDateFormat()).toBeNull()
     expect(() => storeDateFormat('DD_MM_YYYY')).not.toThrow()
+  })
+
+  it('can forget the date format (after the account is deleted)', () => {
+    const storage = memoryStorage({ [dateFormatStorageKey]: 'YYYY_MM_DD', other: 'kept' })
+    vi.stubGlobal('localStorage', storage)
+    forgetStoredDateFormat()
+    expect(readStoredDateFormat()).toBeNull()
+    expect(storage.values.get('other')).toBe('kept')
+    vi.stubGlobal('localStorage', blockedStorage)
+    expect(() => forgetStoredDateFormat()).not.toThrow()
   })
 })

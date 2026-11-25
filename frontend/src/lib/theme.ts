@@ -47,6 +47,15 @@ export function storeTheme(preference: ThemePreference): void {
   }
 }
 
+/** Forgets the theme remembered on this device (e.g. after the account is deleted), so the OS setting applies again. */
+export function forgetStoredTheme(): void {
+  try {
+    localStorage.removeItem(themeStorageKey)
+  } catch {
+    /* Storage may be blocked; then nothing was remembered anyway. */
+  }
+}
+
 function darkSchemeMedia(): MediaQueryList | null {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(darkSchemeQuery) : null
 }

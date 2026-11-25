@@ -17,6 +17,7 @@ import {
 import { useState, type ReactNode } from 'react'
 import { Button } from '../components/Button'
 import { Card, CardHeader } from '../components/Card'
+import { DeleteAccountDialog } from '../components/DeleteAccountDialog'
 import { IconCircle } from '../components/IconCircle'
 import { PageHeader } from '../components/PageHeader'
 import { Select, type SelectOption } from '../components/Select'
@@ -269,7 +270,8 @@ function ManagementRow({ icon, tone, title, description, action, status, note }:
 export function SettingsPage() {
   const { signOut } = useAuth()
   const profile = useCurrentUser()
-  const { error, display, notifications, saveProfile, changeAvatar, changeDisplay, toggleNotification, changePassword, removeAccount } = useSettings()
+  const { error, display, notifications, saveProfile, changeAvatar, changeDisplay, toggleNotification, changePassword, deleteAccount } = useSettings()
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
   function onDisplayChange(changes: Partial<DisplayPreferences>) {
     return changeDisplay(changes)
@@ -291,7 +293,11 @@ export function SettingsPage() {
   }
 
   function onDeleteAccount() {
-    return removeAccount()
+    setDeletingAccount(true)
+  }
+
+  function onCloseDeleteAccount() {
+    setDeletingAccount(false)
   }
 
   function onSignOut() {
@@ -336,9 +342,8 @@ export function SettingsPage() {
               tone="danger"
               title="Delete account"
               description="Permanently delete your account and all data."
-              note="Not available yet"
               action={
-                <Button variant="danger" disabled onClick={onDeleteAccount}>
+                <Button variant="danger" onClick={onDeleteAccount}>
                   Delete account
                 </Button>
               }
@@ -357,6 +362,7 @@ export function SettingsPage() {
           </ul>
         </Card>
       </div>
+      {deletingAccount && <DeleteAccountDialog onDelete={deleteAccount} onClose={onCloseDeleteAccount} />}
     </div>
   )
 }
