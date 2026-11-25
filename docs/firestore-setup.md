@@ -61,7 +61,8 @@ per collection. There is no claim of one-second deployed response time.
 Recurring processing runs on application startup, schedule save and explicit sync;
 there is no background job. Calendar payments can be edited, deleted or marked paid.
 They do not automatically create actual transactions. Email delivery, avatars, official
-tuition lookup, rent maps and discounts remain incomplete. The requirements status file records these limits explicitly.
+tuition lookup, rent maps and discounts remain incomplete. The [Settings guide](settings.md)
+lists the Settings page's limits.
 
 ## Deployment and native builds
 

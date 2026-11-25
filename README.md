@@ -1,6 +1,7 @@
 # QBUDGET
 
 Calendar features and payment-recording behavior: [Calendar guide](docs/calendar.md).
+Settings page features (theme, date format, profile rules, notifications, account deletion): [Settings guide](docs/settings.md).
 
 React + TypeScript + Tailwind frontend, with a separate C++ HTTP API.
 Firebase email/password authentication is implemented; add your web app settings in
