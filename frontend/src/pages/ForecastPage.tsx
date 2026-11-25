@@ -16,6 +16,9 @@ import { StatCard } from '../components/StatCard'
 import { forecastChartPalette, getChartTone } from '../components/categoryStyles'
 import { toneClasses, type Tone } from '../components/tones'
 import { useForecast } from '../hooks/useForecast'
+import { useAiForecast } from '../hooks/useAiForecast'
+import { AiForecastCard } from '../components/AiForecastCard'
+import { applyAiForecast } from '../lib/aiForecast'
 import { formatDate, formatMoney } from '../lib/format'
 import type { BudgetGoal, CategoryBreakdown, ForecastGranularity, GoalKind, MonthlyBreakdown } from '../types'
 
@@ -131,7 +134,11 @@ function BreakdownTable({ breakdown }: { breakdown: MonthlyBreakdown }) {
 export function ForecastPage() {
   const [granularity, setGranularity] = useState<ForecastGranularity>('monthly')
   const [editing, setEditing] = useState<BudgetGoal | null | undefined>(undefined)
-  const { summary, series, categories, breakdown, goals, error, mutationError, clearMutationError, addGoal, editGoal, deleteGoal } = useForecast(granularity)
+  const forecast = useForecast(granularity)
+  const { categories, goals, error, mutationError, clearMutationError, addGoal, editGoal, deleteGoal } = forecast
+  const ai = useAiForecast()
+  const { summary, series, breakdown } = applyAiForecast(forecast.summary, forecast.series, forecast.breakdown,
+    ai.selected ? ai.data : undefined, granularity)
 
   function onGranularityChange(next: ForecastGranularity) {
     setGranularity(next)
@@ -180,6 +187,7 @@ export function ForecastPage() {
         subtitle="View your spending trends, set goals, and see a prediction of your budget."
       />
       <DataError error={pageError(error, mutationError, editing !== undefined)} />
+      <AiForecastCard ai={ai} />
 
       {summary && (
         <div className="mt-5 grid grid-cols-3 gap-5">

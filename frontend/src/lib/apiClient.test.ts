@@ -27,6 +27,8 @@ it('refreshes subscribers after successful writes, but not failed writes or read
   expect(dispatchEvent.mock.calls[0][0].type).toBe('qbudget:data-changed')
   await apiClient.get('/calendar/events')
   expect(dispatchEvent).toHaveBeenCalledTimes(1)
+  await apiClient.post('/forecast/ai', {})
+  expect(dispatchEvent).toHaveBeenCalledTimes(1)
   fetch.mockResolvedValueOnce(new Response('{}', { status: 400 }))
   await expect(apiClient.put('/calendar/reminders', {})).rejects.toThrow()
   expect(dispatchEvent).toHaveBeenCalledTimes(1)

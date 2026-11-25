@@ -1,6 +1,7 @@
 # QBUDGET
 
 Calendar features and payment-recording behavior: [Calendar guide](docs/calendar.md).
+Optional Gemini forecasts, server-key setup and tests: [Gemini guide](docs/gemini.md).
 
 React + TypeScript + Tailwind frontend, with a separate C++ HTTP API.
 Firebase email/password authentication is implemented; add your web app settings in
