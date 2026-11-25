@@ -71,4 +71,38 @@ inline void validateRecord(const SemesterPlan &v) {
                 "Plan amounts must be zero or more and within the supported range.");
     require(v.faculty.size() <= 100 && v.studentStatus.size() <= 100, "Student details are too long.");
 }
+/** Characters (Unicode code points) in UTF-8 text, so limits treat accented and non-Latin names fairly. */
+inline size_t characterCount(const std::string &text) {
+    size_t count = 0;
+    for (unsigned char c : text)
+        if ((c & 0xC0) != 0x80)
+            count++;
+    return count;
+}
+inline bool hasControlCharacter(const std::string &text) {
+    for (unsigned char c : text)
+        if (c < 0x20 || c == 0x7F)
+            return true;
+    return false;
+}
+// Checked when a profile is saved (ProfileService::update trims it first). Reading stays lenient so profiles saved
+// under older rules still load.
+inline void validateRecord(const UserProfile &v) {
+    require(v.fullName.find_first_not_of(" \t\r\n") != std::string::npos, "Enter your full name.");
+    require(!hasControlCharacter(v.fullName), "Your full name can't contain line breaks or tabs.");
+    require(characterCount(v.fullName) <= 100, "Your full name can be at most 100 characters.");
+    require(!v.studentId ||
+                (v.studentId->size() == 8 && v.studentId->find_first_not_of("0123456789") == std::string::npos),
+            "Your student ID must be exactly 8 digits.");
+}
+inline void validateRecord(const DisplayPreferences &v) {
+    require(v.theme == "light" || v.theme == "dark" || v.theme == "system", "Invalid theme.");
+    require(v.currency == "CAD", "Only CAD is supported; changing labels is not currency conversion.");
+    require(v.weekStart == "sunday" || v.weekStart == "monday", "Invalid week start.");
+    require(v.dateFormat == "MMM_DD_YYYY" || v.dateFormat == "DD_MM_YYYY" || v.dateFormat == "YYYY_MM_DD",
+            "Invalid date format.");
+}
+inline void validateRecord(const ReminderSettings &v) {
+    require(v.leadTime == "1_day" || v.leadTime == "3_days" || v.leadTime == "1_week", "Invalid reminder timing.");
+}
 } // namespace qbudget

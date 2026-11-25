@@ -287,6 +287,45 @@ ProfileService and SettingsService test (profile_settings_test.cpp)
    Output: rejected for now, because email isn't set up in the backend.
 10. Turn off payment reminders and turn on goal updates.
     Output: saved.
+11. Save "  Alex Johnson " with student ID " 20231234 ".
+    Output: saved as "Alex Johnson" and "20231234".
+12. Save a student ID of only spaces.
+    Output: the student ID is cleared.
+13. Full name "", spaces only, or a tab and line break.
+    Output: rejected with "Enter your full name."
+14. Full name of 100 letters, 101 letters, and 100 accented letters
+    (200 bytes).
+    Output: 100 is fine, 101 is rejected, and the accented name is fine
+    because the limit counts characters, not bytes.
+15. Full name with a line break or a tab inside it.
+    Output: rejected.
+16. Student ID "20231234", then 7 digits, 9 digits, one with a letter and
+    one with a space.
+    Output: only "20231234" is accepted ("must be exactly 8 digits").
+17. A rejected profile.
+    Output: nothing is saved; the sign-in name is still used.
+18. A profile saved under older rules ("  Old Name  ", "ABC 12").
+    Output: it still loads unchanged.
+19. A number sent as the name or as the student ID.
+    Output: rejected with the same clear messages.
+20. Theme "purple", date format "MM_DD_YYYY" or reminder timing
+    "2_weeks" saved directly through the service.
+    Output: all rejected, nothing saved.
+21. The notification list.
+    Output: four types in order; only payment reminders is available,
+    and it's on by default.
+22. Switch payment reminders off, then on.
+    Output: both saved.
+23. Switch on forecast updates, goal updates or product announcements.
+    Output: rejected ("... aren't available yet"), nothing saved.
+24. An unknown notification type.
+    Output: 404.
+25. The notification routes: list, then "enabled" sent as text or left
+    out, then a real change.
+    Output: the list shows availability, the two bad requests get "Send
+    enabled as true or false.", and the real change is saved.
+26. Save "  Sam Lee " with a blank student ID through the API.
+    Output: "Sam Lee", initials "SL", no student ID.
 
 
 AuthService test (auth_service_test.cpp)
@@ -391,7 +430,7 @@ passes, the totals are:
   date_test                  47/47 Date checks passed.
   forecast_service_test      33/33 ForecastService checks passed.
   notification_service_test  28/28 NotificationService checks passed.
-  profile_settings_test      23/23 Profile and Settings checks passed.
+  profile_settings_test      66/66 Profile and Settings checks passed.
   student_service_test       21/21 StudentService checks passed.
   transaction_service_test   39/39 TransactionService checks passed.
   validation_test            44/44 Validation checks passed.

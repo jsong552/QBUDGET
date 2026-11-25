@@ -230,7 +230,7 @@ function NotificationRow({ preference, onToggle }: { preference: NotificationPre
         <p className="text-[15px] font-semibold text-ink">{preference.title}</p>
         <p className="text-[13px] text-muted">{preference.description}</p>
       </div>
-      <Toggle disabled={preference.key !== 'payment_reminders'} checked={preference.enabled} label={preference.title} onChange={onToggleChange} />
+      <Toggle disabled={!preference.available} checked={preference.enabled} label={preference.title} onChange={onToggleChange} />
     </li>
   )
 }

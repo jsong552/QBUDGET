@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode, type SetStateAction } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { defaultDateFormat, readStoredDateFormat, setDateFormat, storeDateFormat } from '../lib/dateFormat'
 import { applyTheme, defaultThemePreference, readStoredTheme, resolveTheme, storeTheme, systemPrefersDark, watchSystemTheme } from '../lib/theme'
 import { getDisplayPreferences } from '../services/settingsService'
 import type { DisplayPreferences } from '../types'
@@ -14,8 +15,9 @@ interface AccountPreferences {
 
 /**
  * Loads the signed-in user's display preferences once and shares them with every page (see useDisplayPreferences),
- * and shows their theme on the whole document. While signed out or loading, the theme last used on this device is
- * shown instead; index.html applies that same theme before the app starts.
+ * shows their theme on the whole document, and sets the date format that formatDate uses everywhere. While signed
+ * out or loading, the theme and date format last used on this device are used instead; index.html applies that same
+ * theme before the app starts.
  */
 export function DisplayPreferencesProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth()
@@ -72,6 +74,14 @@ export function DisplayPreferencesProvider({ children }: { children: ReactNode }
   useEffect(() => {
     if (savedTheme) storeTheme(savedTheme)
   }, [savedTheme])
+
+  // Set while rendering, not in an effect, so pages drawn in this same render already use the new format.
+  const savedDateFormat = data?.dateFormat
+  setDateFormat(savedDateFormat ?? readStoredDateFormat() ?? defaultDateFormat)
+
+  useEffect(() => {
+    if (savedDateFormat) storeDateFormat(savedDateFormat)
+  }, [savedDateFormat])
 
   const value = useMemo<DisplayPreferencesContextValue>(() => ({ data, error, reload, setData, theme }), [data, error, reload, setData, theme])
   return <DisplayPreferencesContext.Provider value={value}>{children}</DisplayPreferencesContext.Provider>

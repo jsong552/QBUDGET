@@ -341,31 +341,13 @@ class ApiController {
                 return nullptr;
             }
         }
-        if (req.path == "/api/me/notification-preferences" && req.method == "GET") {
-            auto value = settings.notifications();
-            return Json::array({{{"key", "payment_reminders"},
-                                 {"title", "Payment reminders"},
-                                 {"description", "Upcoming payments in the app"},
-                                 {"enabled", value.paymentReminders}},
-                                {{"key", "forecast_updates"},
-                                 {"title", "Forecast updates"},
-                                 {"description", "Not yet available"},
-                                 {"enabled", false}},
-                                {{"key", "goal_updates"},
-                                 {"title", "Goal updates"},
-                                 {"description", "Not yet available"},
-                                 {"enabled", false}},
-                                {{"key", "product_announcements"},
-                                 {"title", "Product announcements"},
-                                 {"description", "Not yet available"},
-                                 {"enabled", false}}});
-        }
+        if (req.path == "/api/me/notification-preferences" && req.method == "GET")
+            return settings.notificationOptions();
         if (req.path.rfind("/api/me/notification-preferences/", 0) == 0 && req.method == "PATCH") {
             auto key = suffix(req.path, "/api/me/notification-preferences");
-            require(key == "payment_reminders", "Only payment reminders are available.");
-            auto value = settings.notifications();
-            value.paymentReminders = body(req).at("enabled").get<bool>();
-            settings.saveNotifications(value);
+            auto value = body(req);
+            require(value.contains("enabled") && value["enabled"].is_boolean(), "Send enabled as true or false.");
+            settings.setNotification(key, value["enabled"].get<bool>());
             return nullptr;
         }
         throw ApiError(404, "Unknown profile endpoint.");

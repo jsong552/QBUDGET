@@ -2,6 +2,7 @@
 #pragma once
 #include "document_store.hpp"
 #include "models.hpp"
+#include "validation.hpp"
 #include <algorithm>
 namespace qbudget {
 inline std::string readText(const Json &j, const char *key, size_t limit = 200) {
@@ -86,11 +87,16 @@ inline void from_json(const Json &j, FeeStatus &v) {
 inline void to_json(Json &j, const UserProfile &v) {
     j = {{"fullName", v.fullName}, {"studentId", v.studentId ? Json(*v.studentId) : Json(nullptr)}};
 }
+// Lenient on purpose, so profiles saved under older rules still load. ProfileService::update trims the profile and
+// applies the stricter rules (validateRecord) before anything is saved.
 inline void from_json(const Json &j, UserProfile &v) {
-    v.fullName = readText(j, "fullName", 100);
+    require(j.contains("fullName") && j["fullName"].is_string(), "Enter your full name.");
+    v.fullName = j["fullName"].get<std::string>();
     v.studentId.reset();
-    if (j.contains("studentId") && !j["studentId"].is_null())
-        v.studentId = readText(j, "studentId", 40);
+    if (j.contains("studentId") && !j["studentId"].is_null()) {
+        require(j["studentId"].is_string(), "Your student ID must be exactly 8 digits.");
+        v.studentId = j["studentId"].get<std::string>();
+    }
 }
 inline void to_json(Json &j, const Category &v) {
     j = {{"id", v.id}, {"name", v.name}, {"custom", v.custom}, {"archived", v.archived}};
@@ -238,19 +244,14 @@ inline void to_json(Json &j, const DisplayPreferences &v) {
 inline void from_json(const Json &j, DisplayPreferences &v) {
     v = {j.value("theme", "system"), j.value("currency", "CAD"), j.value("weekStart", "sunday"),
          j.value("dateFormat", "MMM_DD_YYYY")};
-    require(v.theme == "light" || v.theme == "dark" || v.theme == "system", "Invalid theme.");
-    require(v.currency == "CAD", "Only CAD is supported; changing labels is not currency conversion.");
-    require(v.weekStart == "sunday" || v.weekStart == "monday", "Invalid week start.");
-    require(v.dateFormat == "MMM_DD_YYYY" || v.dateFormat == "DD_MM_YYYY" || v.dateFormat == "YYYY_MM_DD",
-            "Invalid date format.");
+    validateRecord(v);
 }
 inline void to_json(Json &j, const ReminderSettings &v) {
     j = {{"emailEnabled", v.emailEnabled}, {"leadTime", v.leadTime}};
 }
 inline void from_json(const Json &j, ReminderSettings &v) {
     v = {j.value("emailEnabled", false), j.value("leadTime", "1_day")};
-    require(v.leadTime == "1_day" || v.leadTime == "3_days" || v.leadTime == "1_week",
-            "Invalid reminder timing.");
+    validateRecord(v);
 }
 inline void to_json(Json &j, const NotificationPreferences &v) {
     j = {{"payment_reminders", v.paymentReminders},
