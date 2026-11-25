@@ -2,6 +2,7 @@
 #pragma once
 #include "json.hpp"
 #include <string>
+#include <vector>
 namespace qbudget {
 using Json = nlohmann::json;
 class DocumentStore {
@@ -13,5 +14,10 @@ class DocumentStore {
     virtual std::string create(const std::string &collection, const Json &value) const = 0;
     virtual bool createOnce(const std::string &path, const Json &value) const = 0;
     virtual void remove(const std::string &path) const = 0;
+    /** Deletes several records. Stores that can batch deletes override this; by default they go one at a time. */
+    virtual void removeAll(const std::vector<std::string> &paths) const {
+        for (const auto &path : paths)
+            remove(path);
+    }
 };
 } // namespace qbudget

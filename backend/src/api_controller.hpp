@@ -2,6 +2,7 @@
 // response shapes.
 #pragma once
 #include "httplib.h"
+#include "account_service.hpp"
 #include "budget_service.hpp"
 #include "forecast_service.hpp"
 #include "student_service.hpp"
@@ -11,6 +12,8 @@ namespace qbudget {
 class ApiController {
     AuthenticatedUser user;
     Date now;
+    const DocumentStore &database;
+    std::function<void(const AuthenticatedUser &)> deleteSignIn; // deletes the Firebase sign-in (see main.cpp)
     TransactionRepository transactionRepository;
     CategoryRepository categoryRepository;
     BudgetRepository budgetRepository;
@@ -330,6 +333,12 @@ class ApiController {
                 return userView(profiles.get(user));
             if (req.method == "PUT" || req.method == "POST")
                 return userView(profiles.update(body(req).get<UserProfile>()));
+            if (req.method == "DELETE") {
+                if (!deleteSignIn)
+                    throw ApiError(503, "Account deletion is not configured on this server.");
+                AccountService(database).deleteAccount(user, deleteSignIn);
+                return nullptr;
+            }
         }
         if (req.path == "/api/me/preferences") {
             if (req.method == "GET")
@@ -448,8 +457,10 @@ class ApiController {
     }
 
   public:
-    ApiController(const DocumentStore &db, AuthenticatedUser identity, Date date = Date::current())
-        : user(std::move(identity)), now(date), transactionRepository(db), categoryRepository(db),
+    ApiController(const DocumentStore &db, AuthenticatedUser identity, Date date = Date::current(),
+                  std::function<void(const AuthenticatedUser &)> signInDeleter = nullptr)
+        : user(std::move(identity)), now(date), database(db), deleteSignIn(std::move(signInDeleter)),
+          transactionRepository(db), categoryRepository(db),
           budgetRepository(db), goalRepository(db), eventRepository(db), recurringRepository(db),
           bursaryRepository(db), feeRepository(db), profileRepository(db), settingsRepository(db),
           categories(categoryRepository), transactions(transactionRepository, categories),
@@ -481,7 +492,7 @@ class ApiController {
             {std::regex(R"(/api/semester/rates)"), "GET"},
             {std::regex(R"(/api/(bursaries|fees))"), "GET POST"},
             {std::regex(R"(/api/(bursaries|fees)/.+)"), "PUT DELETE"},
-            {std::regex(R"(/api/me)"), "GET PUT POST"},
+            {std::regex(R"(/api/me)"), "GET PUT POST DELETE"},
             {std::regex(R"(/api/me/preferences)"), "GET PATCH"},
             {std::regex(R"(/api/me/notification-preferences)"), "GET"},
             {std::regex(R"(/api/me/notification-preferences/.+)"), "PATCH"},

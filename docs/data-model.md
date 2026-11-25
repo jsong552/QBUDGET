@@ -20,7 +20,7 @@ users/{verifiedUid}                         UserProfile
   settings/semester                        SemesterPlan
 ```
 
-`id` is derived from the document path, not duplicated in document fields. Ownership comes from the verified Firebase token, not a JSON ownerUid supplied by the client. Passwords and tokens are not stored in these documents. Removing the user root document alone does not recursively delete subcollections; account deletion is not implemented.
+`id` is derived from the document path, not duplicated in document fields. Ownership comes from the verified Firebase token, not a JSON ownerUid supplied by the client. Passwords and tokens are not stored in these documents. Removing the user root document alone does not recursively delete subcollections, so account deletion (`DELETE /api/me`, `backend/src/account_service.hpp`) deletes every record in the listed collections, then the profile document, then the Firebase sign-in. It requires a sign-in within the last 4 minutes (Firebase's own limit is about 5), deletes in Firestore batches of up to 500, and is safe to retry if it fails part-way. **Add any new per-user collection to `AccountService::collections()`**, or deleting an account leaves its records behind.
 
 Money is CAD integer cents. Expenses in the transaction ledger and recurring templates are negative; all costs/limits elsewhere are positive. Dates are ISO date-only strings, not Firestore timestamps. Optional fields such as studentId/endDate use null. JSON codecs read defaults for old transaction note/recurrenceId/voided and calendar paid fields, preserving older records.
 
@@ -39,7 +39,7 @@ occurrence. See [Calendar behavior](calendar.md) for editing/deletion semantics.
 
 A Category has many Transaction and CategoryBudget references through categoryId. A RecurringEntry generates many Transactions with recurrenceId. Each user's collections are isolated; category IDs have meaning only within that user and the fixed catalogue.
 
-Custom category removal archives it. Existing transactions remain readable and editable with their original category. Budget summaries omit archived categories. Existing schedules retain their original category unless edited/paused. Manual transaction deletion removes its document; generated transaction deletion leaves voided=true so retries cannot regenerate it. Schedule deletion does not erase prior transactions. Deleting goals/events/bursaries/fees removes their documents.
+Custom category removal archives it (category documents are only deleted when the whole account is deleted). Existing transactions remain readable and editable with their original category. Budget summaries omit archived categories. Existing schedules retain their original category unless edited/paused. Manual transaction deletion removes its document; generated transaction deletion leaves voided=true so retries cannot regenerate it. Schedule deletion does not erase prior transactions. Deleting goals/events/bursaries/fees removes their documents.
 
 Budget IDs enforce one definition per category/period. Recurrence IDs use rec_<scheduleId>_<date> with create-only writes. Other records use Firestore-generated IDs. No multi-document cascade or cross-record transaction is assumed.
 

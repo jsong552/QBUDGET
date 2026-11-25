@@ -345,6 +345,53 @@ AuthService test (auth_service_test.cpp)
    Output: 502.
 7. No user found, or the account is disabled.
    Output: 401.
+8. Decode "aGVsbG8", "_-8" and "a$b" (the text format inside login
+   tokens).
+   Output: "hello", the two bytes FF EF, and nothing for the invalid one.
+9. Tokens with a sign-in time, without one, not a token at all, and
+   garbled.
+   Output: the sign-in time (1764060000) for the first, 0 (unknown) for
+   the rest.
+10. Delete a user's sign-in.
+    Output: the request goes to Firebase's accounts:delete with the key
+    and the user's token.
+11. Firebase says the user doesn't exist (already deleted).
+    Output: no error, so a retry can finish.
+12. Firebase says the login is too old.
+    Output: 403, "For your security, sign in again before deleting your
+    account."
+13. Firebase says the token is invalid, Firebase is down, or no API key.
+    Output: 401, 502 and 503.
+
+
+Account deletion test (account_deletion_test.cpp)
+-------------------------------------------------
+Deleting a whole account (DELETE /api/me). It deletes every record, then
+the profile, then the Firebase sign-in.
+
+1. Make records of every kind through the app (a custom category,
+   transactions, a budget, a goal, a calendar payment that was paid, a
+   recurring schedule and its transactions, a bursary, a fee, a semester
+   plan, all settings and the profile), then delete the account.
+   Output: nothing is left anywhere, and the sign-in is deleted once,
+   only after all the data is gone.
+2. Delete with a sign-in from 5 minutes ago.
+   Output: 403 ("sign in again"), and nothing is deleted.
+3. Signed in exactly 4 minutes ago, 4 minutes 1 second ago, and an
+   unknown sign-in time.
+   Output: the first is allowed, the other two get 403.
+4. Delete an account that has no data.
+   Output: the sign-in is still deleted.
+5. Deleting the sign-in fails, then try again.
+   Output: the first try reports the error (the data is already gone),
+   and the second try deletes the sign-in.
+6. A server that wasn't given a way to delete sign-ins.
+   Output: 503, and nothing is deleted.
+7. Delete 501 transactions and the profile through the Firestore client.
+   Output: two batch requests (500, then 2), with the user's own login,
+   only under users/alice, and the profile last.
+8. Firestore refuses (rules not published).
+   Output: 403, "...Publish firestore.rules...".
 
 
 Date test (date_test.cpp)
@@ -423,7 +470,8 @@ To run all of them:
 Each test prints [PASS] for every test, then a total. When everything
 passes, the totals are:
 
-  auth_service_test          19/19 AuthService checks passed.
+  account_deletion_test      30/30 Account deletion checks passed.
+  auth_service_test          34/34 AuthService checks passed.
   budget_service_test        31/31 BudgetService checks passed.
   calendar_service_test      45/45 Calendar and Recurrence checks passed.
   category_service_test      30/30 CategoryService checks passed.
