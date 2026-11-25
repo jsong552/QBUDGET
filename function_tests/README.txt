@@ -271,16 +271,22 @@ ProfileService and SettingsService test (profile_settings_test.cpp)
 3. Save a full name and student ID.
    Output: those come back instead.
 4. Default settings.
-   Output: light theme, CAD, week starts Sunday, email reminders off,
-   1 day lead time, only payment reminders on.
+   Output: system theme (follows the device's light/dark setting), CAD,
+   week starts Sunday, email reminders off, 1 day lead time, only payment
+   reminders on.
 5. Save dark theme and Monday.
    Output: saved.
-6. Save "3 days" lead time.
+6. Saved display settings that have no theme.
+   Output: the theme falls back to system, and the other saved settings
+   are kept.
+7. Themes "light", "dark", "system", then "purple", "" and "Dark".
+   Output: the first three are accepted, the last three are rejected.
+8. Save "3 days" lead time.
    Output: saved.
-7. Turn on email reminders.
+9. Turn on email reminders.
    Output: rejected for now, because email isn't set up in the backend.
-8. Turn off payment reminders and turn on goal updates.
-   Output: saved.
+10. Turn off payment reminders and turn on goal updates.
+    Output: saved.
 
 
 AuthService test (auth_service_test.cpp)
@@ -385,7 +391,7 @@ passes, the totals are:
   date_test                  47/47 Date checks passed.
   forecast_service_test      33/33 ForecastService checks passed.
   notification_service_test  28/28 NotificationService checks passed.
-  profile_settings_test      15/15 Profile and Settings checks passed.
+  profile_settings_test      23/23 Profile and Settings checks passed.
   student_service_test       21/21 StudentService checks passed.
   transaction_service_test   39/39 TransactionService checks passed.
   validation_test            44/44 Validation checks passed.

@@ -137,7 +137,8 @@ struct ForecastMonth {
     MoneyCents incomeCents, expensesCents, projectedBalanceCents;
 };
 struct DisplayPreferences {
-    std::string theme = "light", currency = "CAD", weekStart = "sunday", dateFormat = "MMM_DD_YYYY";
+    // "system" follows the device's light/dark setting until the user picks a theme.
+    std::string theme = "system", currency = "CAD", weekStart = "sunday", dateFormat = "MMM_DD_YYYY";
 };
 struct ReminderSettings {
     bool emailEnabled = false;

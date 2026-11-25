@@ -1,7 +1,8 @@
 /*
  * Description: Function tests for ProfileService and SettingsService (Settings page). Covers
  *              the default profile name, saving the profile, default display/reminder/notification
- *              settings, and saving each type of setting. Uses the in-memory test store.
+ *              settings, saving each type of setting, and which themes are allowed. Uses the
+ *              in-memory test store.
  */
 #include "../backend/src/profile_service.hpp"
 #include "../backend/tests/memory_store.hpp"
@@ -75,7 +76,7 @@ int main() {
     test("Default settings", [] {
         Setup s;
         auto display = s.settings.display();
-        check(display.theme == "light" && display.currency == "CAD", "Light theme, CAD");
+        check(display.theme == "system" && display.currency == "CAD", "System theme, CAD");
         check(display.weekStart == "sunday" && display.dateFormat == "MMM_DD_YYYY", "Week start and date format");
         auto reminders = s.settings.reminders();
         check(!reminders.emailEnabled && reminders.leadTime == "1_day", "Email off, 1 day lead time");
@@ -93,6 +94,21 @@ int main() {
         s.settings.saveDisplay(dark);
         auto loaded = s.settings.display();
         check(loaded.theme == "dark" && loaded.weekStart == "monday", "Dark theme and Monday saved");
+    });
+
+    test("Saved display settings without a theme use the system theme", [] {
+        Setup s;
+        s.store.put("/settings/display", {{"currency", "CAD"}, {"weekStart", "monday"}, {"dateFormat", "YYYY_MM_DD"}});
+        auto loaded = s.settings.display();
+        check(loaded.theme == "system", "Missing theme falls back to system");
+        check(loaded.weekStart == "monday" && loaded.dateFormat == "YYYY_MM_DD", "Other saved settings kept");
+    });
+
+    test("Only light, dark and system themes are accepted", [] {
+        for (const std::string theme : {"light", "dark", "system"})
+            check(Json{{"theme", theme}}.get<DisplayPreferences>().theme == theme, theme + " accepted");
+        for (const std::string theme : {"purple", "", "Dark"})
+            fails(400, [&] { Json{{"theme", theme}}.get<DisplayPreferences>(); }, "'" + theme + "' rejected");
     });
 
     test("Save reminder lead time", [] {

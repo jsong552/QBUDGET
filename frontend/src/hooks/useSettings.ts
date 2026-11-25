@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 import {
   deleteAccount,
-  getDisplayPreferences,
   getNotificationPreferences,
   requestPasswordChange,
   updateDisplayPreferences,
@@ -12,12 +11,16 @@ import {
 import type { DisplayPreferences, NotificationKey, ProfileInput } from '../types'
 import { useAuth } from './useAuth'
 import { useAsync } from './useAsync'
+import { useDisplayPreferences } from './useDisplayPreferences'
 import { useMutation } from './useMutation'
 
-/** Settings data. The profile itself is the session user (see useCurrentUser), so the header updates on save. */
+/**
+ * Settings data. The profile itself is the session user (see useCurrentUser), so the header updates on save.
+ * Display preferences are the app-wide copy (see DisplayPreferencesProvider), so a new theme shows on every page at once.
+ */
 export function useSettings() {
   const { updateUser } = useAuth()
-  const display = useAsync(getDisplayPreferences)
+  const display = useDisplayPreferences()
   const notifications = useAsync(getNotificationPreferences)
   const { run, error: mutationError } = useMutation()
 

@@ -236,7 +236,7 @@ inline void to_json(Json &j, const DisplayPreferences &v) {
          {"dateFormat", v.dateFormat}};
 }
 inline void from_json(const Json &j, DisplayPreferences &v) {
-    v = {j.value("theme", "light"), j.value("currency", "CAD"), j.value("weekStart", "sunday"),
+    v = {j.value("theme", "system"), j.value("currency", "CAD"), j.value("weekStart", "sunday"),
          j.value("dateFormat", "MMM_DD_YYYY")};
     require(v.theme == "light" || v.theme == "dark" || v.theme == "system", "Invalid theme.");
     require(v.currency == "CAD", "Only CAD is supported; changing labels is not currency conversion.");
