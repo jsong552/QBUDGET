@@ -5,7 +5,11 @@
 #include <cstdlib>
 #include <memory>
 #include <functional>
+#include <vector>
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -39,6 +43,7 @@ struct HttpResult {
     int status;
     std::string body;
 };
+using HttpHeaders = std::vector<std::pair<std::string, std::string>>;
 #ifdef _WIN32
 struct InternetHandle {
     HINTERNET value;
@@ -53,8 +58,8 @@ struct InternetHandle {
 inline std::wstring wide(const std::string &value) {
     return std::wstring(value.begin(), value.end());
 }
-inline HttpResult https(const std::string &host, const std::string &method, const std::string &path,
-                        const std::string &body, const std::string &token = "") {
+inline HttpResult httpsWithHeaders(const std::string &host, const std::string &method, const std::string &path,
+                        const std::string &body, const std::string &token, const HttpHeaders &extraHeaders) {
     InternetHandle session(WinHttpOpen(L"QBudget/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
     WinHttpSetTimeouts(session.value, 10000, 10000, 10000, 20000);
@@ -66,6 +71,11 @@ inline HttpResult https(const std::string &host, const std::string &method, cons
     std::wstring headers = L"Content-Type: application/json\r\n";
     if (!token.empty())
         headers += L"Authorization: Bearer " + wide(token) + L"\r\n";
+    for (const auto &[name, value] : extraHeaders) {
+        require(name.find_first_of("\r\n:") == std::string::npos &&
+                value.find_first_of("\r\n") == std::string::npos, "Invalid HTTP header.");
+        headers += wide(name) + L": " + wide(value) + L"\r\n";
+    }
     if (!WinHttpSendRequest(request.value, headers.c_str(), static_cast<DWORD>(headers.size()),
                             body.empty() ? WINHTTP_NO_REQUEST_DATA : const_cast<char *>(body.data()),
                             static_cast<DWORD>(body.size()), static_cast<DWORD>(body.size()), 0) ||
@@ -97,8 +107,8 @@ inline size_t receive(char *data, size_t size, size_t count, void *target) {
     text.append(data, length);
     return length;
 }
-inline HttpResult https(const std::string &host, const std::string &method, const std::string &path,
-                        const std::string &body, const std::string &token = "") {
+inline HttpResult httpsWithHeaders(const std::string &host, const std::string &method, const std::string &path,
+                        const std::string &body, const std::string &token, const HttpHeaders &extraHeaders) {
     static const int initialized = curl_global_init(CURL_GLOBAL_DEFAULT);
     if (initialized != CURLE_OK)
         throw ApiError(502, "HTTPS initialization failed.");
@@ -108,6 +118,13 @@ inline HttpResult https(const std::string &host, const std::string &method, cons
     curl_slist *raw = curl_slist_append(nullptr, "Content-Type: application/json");
     if (!token.empty())
         raw = curl_slist_append(raw, ("Authorization: Bearer " + token).c_str());
+    for (const auto &[name, value] : extraHeaders) {
+        if (name.find_first_of("\r\n:") != std::string::npos || value.find_first_of("\r\n") != std::string::npos) {
+            curl_slist_free_all(raw);
+            throw ApiError(400, "Invalid HTTP header.");
+        }
+        raw = curl_slist_append(raw, (name + ": " + value).c_str());
+    }
     std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(raw, curl_slist_free_all);
     const auto url = "https://" + host + path;
     std::string output;
@@ -128,6 +145,10 @@ inline HttpResult https(const std::string &host, const std::string &method, cons
     return {static_cast<int>(status), output};
 }
 #endif
+inline HttpResult https(const std::string &host, const std::string &method, const std::string &path,
+                        const std::string &body, const std::string &token = "") {
+    return httpsWithHeaders(host, method, path, body, token, {});
+}
 inline Json parseResponse(const HttpResult &response) {
     try {
         return Json::parse(response.body);

@@ -7,6 +7,7 @@
 #include "student_service.hpp"
 #include "notification_service.hpp"
 #include "calendar_planner.hpp"
+#include "gemini_forecast_service.hpp"
 namespace qbudget {
 class ApiController {
     AuthenticatedUser user;
@@ -32,6 +33,7 @@ class ApiController {
     SettingsService settings;
     ForecastService forecasts;
     NotificationService notifications;
+    GeminiForecastService &gemini;
     std::optional<Ledger> cachedLedger; // per request only, never shared between users
     Ledger &ledger() {
         if (!cachedLedger)
@@ -432,17 +434,21 @@ class ApiController {
         auto projection = forecasts.series(months, now, mode);
         Json summary = {
             {"projectedIncomeCents", income},
-            {"projectedIncomeCaption", "30-day trend or known recurring income"},
+            {"projectedIncomeCaption", forecasts.monthlyIncomeBaseline(ledger(), now)
+                ? "Prior two full months; scheduled income is a floor"
+                : "30-day income trend; may include one-off payments"},
             {"projectedExpensesCents", expenses},
             {"projectedExpensesCaption", "30-day trend, at least known payments"},
             {"projectedBalanceCents", months.back().projectedBalanceCents},
             {"projectedBalanceCaption", "Estimate through " + now.startOfMonth(4).addDays(-1).str()},
             {"termLabel", "Current four-month term"}};
         Json series = {{"granularity", mode},
+                       {"asOf", now},
                        {"income", ledger().points(term(), mode, true)},
                        {"expenses", ledger().points(term(), mode, false)},
+                       {"projectedIncome", forecasts.series(months, now, mode, true)},
                        {"projectedExpenses", projection}};
-        Json monthly = {{"description", "Forecast uses the last 30 days, with known payments and recurring "
+        Json monthly = {{"asOf", now}, {"description", "The current row covers only the remaining days; later rows are full months. Spending uses the last 30 days, with known payments and recurring "
                                         "entries as a floor. Estimates are not guarantees."},
                         {"months", months}};
         if (req.path == "/api/forecast") {
@@ -466,7 +472,8 @@ class ApiController {
     }
 
   public:
-    ApiController(const DocumentStore &db, AuthenticatedUser identity, Date date = Date::current())
+    ApiController(const DocumentStore &db, AuthenticatedUser identity, Date date = Date::current(),
+                  GeminiForecastService &ai = sharedGeminiForecast())
         : user(std::move(identity)), now(date), transactionRepository(db), categoryRepository(db),
           budgetRepository(db), goalRepository(db), eventRepository(db), recurringRepository(db),
           bursaryRepository(db), feeRepository(db), profileRepository(db), settingsRepository(db),
@@ -474,7 +481,7 @@ class ApiController {
           budgets(budgetRepository, categories), goals(goalRepository), calendar(eventRepository, &transactionRepository),
           recurrence(recurringRepository, transactionRepository, categories),
           students(bursaryRepository, feeRepository, settingsRepository), profiles(profileRepository),
-          settings(settingsRepository) {}
+          settings(settingsRepository), gemini(ai) {}
     Json handle(const httplib::Request &req) {
         // Ordered patterns: fixed routes precede record IDs so reserved names cannot become writes.
         static const std::vector<std::pair<std::regex, std::string>> routes = {
@@ -505,6 +512,8 @@ class ApiController {
             {std::regex(R"(/api/me/notification-preferences/.+)"), "PATCH"},
             {std::regex(R"(/api/dashboard(/(summary|activity|categories))?)"), "GET"},
             {std::regex(R"(/api/forecast(/(summary|series|categories|monthly))?)"), "GET"},
+            {std::regex(R"(/api/forecast/ai)"), "POST"},
+            {std::regex(R"(/api/forecast/ai/status)"), "GET"},
             {std::regex(R"(/api/(notifications|app/today))"), "GET"}};
         bool matched = false;
         for (const auto &[pattern, methods] : routes)
@@ -533,6 +542,12 @@ class ApiController {
             return studentRoute(req);
         if (req.path.rfind("/api/me", 0) == 0)
             return profileRoute(req);
+        if (req.path == "/api/forecast/ai/status") return gemini.status();
+        if (req.path == "/api/forecast/ai") {
+            require(body(req).empty(), "AI forecasts use your saved budget. Send an empty object.");
+            return gemini.analyze(user.uid, aiForecastInput(ledger(), calendar.list(), recurrence.list(),
+                categories.list(true), budgets.summaries(ledger(), now), goals.progress(ledger(), now), now));
+        }
         if (req.method != "GET")
             throw ApiError(405, "Unsupported operation.");
         if (req.path.rfind("/api/dashboard", 0) == 0)

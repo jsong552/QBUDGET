@@ -176,10 +176,12 @@ export type ForecastGranularity = 'weekly' | 'monthly' | 'semester'
 
 export interface ForecastSeries {
   granularity: ForecastGranularity
+  asOf?: IsoDate
   income: SeriesPoint[]
   expenses: SeriesPoint[]
-  /** Continues the expenses line; its first point repeats the last actual expense point. */
+  /** Future amounts only; the chart adds recorded amounts in overlapping periods. */
   projectedExpenses: SeriesPoint[]
+  projectedIncome?: SeriesPoint[]
 }
 
 export interface MonthlyProjection {
@@ -187,9 +189,11 @@ export interface MonthlyProjection {
   incomeCents: number
   expensesCents: number
   projectedBalanceCents: number
+  explanation?: string
 }
 
 export interface MonthlyBreakdown {
+  asOf?: IsoDate
   /** e.g. "Estimated expenses for the next 3 months." */
   description: string
   months: MonthlyProjection[]

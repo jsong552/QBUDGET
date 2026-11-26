@@ -4,17 +4,28 @@
 namespace qbudget {
 class ForecastService {
   public:
+    // Two completed months avoid treating a current-month grant/windfall as monthly pay.
+    // With less history retain the documented trailing-30-day estimate.
+    std::optional<MoneyCents> monthlyIncomeBaseline(const Ledger &ledger, Date now) const {
+        auto earlier = ledger.totals(DateRange{now.startOfMonth(-2), now.startOfMonth(-1)}).incomeCents;
+        auto previous = ledger.totals(DateRange{now.startOfMonth(-1), now.startOfMonth()}).incomeCents;
+        if (earlier <= 0 || previous <= 0) return std::nullopt;
+        return addMoney(earlier, previous) / 2;
+    }
     std::vector<SeriesPoint> series(const std::vector<ForecastMonth> &months, Date now,
-                                    const std::string &granularity) const {
+                                    const std::string &granularity, bool income = false) const {
         std::map<std::string, MoneyCents> groups;
         for (const auto &month : months) {
+            const auto total = income ? month.incomeCents : month.expensesCents;
             auto start = month.month < now ? now.addDays(1) : month.month;
             if (start == now)
                 start = now.addDays(1);
             auto end = month.month.startOfMonth(1);
             int days = start.daysUntil(end);
             if (days <= 0) {
-                groups[month.month.str()] = addMoney(groups[month.month.str()], month.expensesCents);
+                auto key = granularity == "weekly" ? now.startOfWeek()
+                         : granularity == "semester" ? now.startOfTerm() : month.month;
+                groups[key.str()] = addMoney(groups[key.str()], total);
                 continue;
             }
             for (int i = 0; i < days; i++) {
@@ -22,7 +33,7 @@ class ForecastService {
                 auto key = granularity == "weekly"     ? date.startOfWeek()
                            : granularity == "semester" ? date.startOfTerm()
                                                        : date.startOfMonth();
-                auto amount = month.expensesCents / days + (i < month.expensesCents % days ? 1 : 0);
+                auto amount = total / days + (i < total % days ? 1 : 0);
                 groups[key.str()] = addMoney(groups[key.str()], amount);
             }
         }
@@ -36,6 +47,8 @@ class ForecastService {
                                         int months = 4) const {
         require(months >= 1 && months <= 12, "Forecast horizon must be 1 to 12 months.");
         auto baseline = ledger.totals(DateRange{now.addDays(-29), now.addDays(1)});
+        auto monthlyIncome = monthlyIncomeBaseline(ledger, now);
+        auto receivedThisMonth = ledger.totals(DateRange{now.startOfMonth(), now.addDays(1)}).incomeCents;
         MoneyCents balance = ledger.totals().balance();
         std::vector<ForecastMonth> result;
         for (int index = 0; index < months; index++) {
@@ -44,6 +57,9 @@ class ForecastService {
             int days = futureStart.daysUntil(end);
             // Round integer cents half up; no floating point money calculation.
             auto income = (baseline.incomeCents / 30) * days + ((baseline.incomeCents % 30) * days + 15) / 30;
+            if (monthlyIncome)
+                income = index == 0 ? (days > 0 ? std::max<MoneyCents>(0, *monthlyIncome - receivedThisMonth) : 0)
+                                    : *monthlyIncome;
             auto expenses =
                 (baseline.expensesCents / 30) * days + ((baseline.expensesCents % 30) * days + 15) / 30;
             MoneyCents knownIncome = 0, knownExpenses = 0;

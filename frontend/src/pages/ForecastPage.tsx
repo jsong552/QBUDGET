@@ -16,6 +16,9 @@ import { StatCard } from '../components/StatCard'
 import { forecastChartPalette, getChartTone } from '../components/categoryStyles'
 import { toneClasses, type Tone } from '../components/tones'
 import { useForecast } from '../hooks/useForecast'
+import { useAiForecast } from '../hooks/useAiForecast'
+import { AiForecastCard, AiForecastDetails } from '../components/AiForecastCard'
+import { applyAiForecast } from '../lib/aiForecast'
 import { formatDate, formatMoney } from '../lib/format'
 import type { BudgetGoal, CategoryBreakdown, ForecastGranularity, GoalKind, MonthlyBreakdown } from '../types'
 
@@ -104,6 +107,7 @@ function GoalRow({ goal, onOpenGoalMenu }: { goal: BudgetGoal; onOpenGoalMenu: (
 }
 
 function BreakdownTable({ breakdown }: { breakdown: MonthlyBreakdown }) {
+  const hasExplanations = breakdown.months.some((row) => row.explanation)
   return (
     <table className="mt-4 w-full text-sm">
       <thead>
@@ -111,16 +115,20 @@ function BreakdownTable({ breakdown }: { breakdown: MonthlyBreakdown }) {
           <th className="rounded-l-md px-5 py-1.5 text-left font-medium">Month</th>
           <th className="px-3 py-1.5 text-center font-medium">Income</th>
           <th className="px-3 py-1.5 text-center font-medium">Expenses</th>
-          <th className="rounded-r-md px-3 py-1.5 text-center font-medium">Projected balance</th>
+          <th className="px-3 py-1.5 text-center font-medium">Net cash flow</th>
+          <th className="px-3 py-1.5 text-center font-medium">Projected balance</th>
+          {hasExplanations && <th className="px-3 py-1.5 text-left font-medium">Why this estimate?</th>}
         </tr>
       </thead>
       <tbody>
         {breakdown.months.map((row) => (
           <tr key={row.month} className="border-b border-line">
-            <td className="px-5 py-1.5 text-ink">{formatDate(row.month, 'month')}</td>
+            <td className="px-5 py-3 text-ink">{formatDate(row.month, 'month')}<span className="block text-xs text-muted">{row.month.slice(0, 7) === breakdown.asOf?.slice(0, 7) ? 'Remaining days' : 'Full month'}</span></td>
             <td className="px-3 py-1.5 text-center text-success">{formatMoney(row.incomeCents)}</td>
             <td className="px-3 py-1.5 text-center text-danger">{formatMoney(row.expensesCents)}</td>
+            <td className="px-3 py-1.5 text-center">{formatMoney(row.incomeCents - row.expensesCents)}</td>
             <td className="px-3 py-1.5 text-center text-ink">{formatMoney(row.projectedBalanceCents)}</td>
+            {hasExplanations && <td className="max-w-sm px-3 py-3 text-xs text-muted">{row.explanation}</td>}
           </tr>
         ))}
       </tbody>
@@ -131,7 +139,11 @@ function BreakdownTable({ breakdown }: { breakdown: MonthlyBreakdown }) {
 export function ForecastPage() {
   const [granularity, setGranularity] = useState<ForecastGranularity>('monthly')
   const [editing, setEditing] = useState<BudgetGoal | null | undefined>(undefined)
-  const { summary, series, categories, breakdown, goals, error, mutationError, clearMutationError, addGoal, editGoal, deleteGoal } = useForecast(granularity)
+  const forecast = useForecast(granularity)
+  const { categories, goals, error, mutationError, clearMutationError, addGoal, editGoal, deleteGoal } = forecast
+  const ai = useAiForecast()
+  const { summary, series, breakdown } = applyAiForecast(forecast.summary, forecast.series, forecast.breakdown,
+    ai.selected ? ai.data : undefined, granularity)
 
   function onGranularityChange(next: ForecastGranularity) {
     setGranularity(next)
@@ -180,6 +192,7 @@ export function ForecastPage() {
         subtitle="View your spending trends, set goals, and see a prediction of your budget."
       />
       <DataError error={pageError(error, mutationError, editing !== undefined)} />
+      <AiForecastCard ai={ai} />
 
       {summary && (
         <div className="mt-5 grid grid-cols-3 gap-5">
@@ -201,7 +214,12 @@ export function ForecastPage() {
         {categories && summary && <CategoryCard breakdown={categories} termLabel={summary.termLabel} />}
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-5">
+      <Card className="mt-4 px-5 pt-5 pb-4">
+        <CardHeader title="Predicted monthly breakdown" subtitle={breakdown?.description} />
+        {breakdown && <BreakdownTable breakdown={breakdown} />}
+      </Card>
+      <AiForecastDetails ai={ai} />
+      <div className="mt-4">
         <Card className="px-5 pt-5 pb-4">
           <CardHeader
             title="Budget goals"
@@ -217,10 +235,6 @@ export function ForecastPage() {
               <GoalRow key={goal.id} goal={goal} onOpenGoalMenu={onOpenGoalMenu} />
             ))}
           </ul>
-        </Card>
-        <Card className="px-5 pt-5 pb-4">
-          <CardHeader title="Predicted monthly breakdown" subtitle={breakdown?.description} />
-          {breakdown && <BreakdownTable breakdown={breakdown} />}
         </Card>
       </div>
     </div>
