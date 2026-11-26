@@ -7,7 +7,8 @@ int checks = 0;
 void check(bool ok, const char *message) { checks++; if (!ok) throw std::runtime_error(message); }
 Json candidate(const AiForecastInput &input) {
     Json months = Json::array();
-    for (const auto &month : input.baseline) months.push_back({{"month", month.month}, {"expensesCents", month.expensesCents}});
+    for (const auto &month : input.baseline) months.push_back({{"month", month.month}, {"expensesCents", month.expensesCents},
+        {"explanation", "Uses the supplied baseline for this period; no additional cuts assumed."}});
     return {{"summary", "Spending is stable."}, {"months", months}, {"risks", {"Income may vary."}},
         {"suggestions", {"Review discretionary spending."}}, {"assumptions", {"Based on recorded history."}}};
 }
@@ -24,6 +25,9 @@ int main() {
         auto input = aiForecastInput(ledger, events, {}, {{"other", "PRIVATE category", true, false}}, {}, {}, now);
         check(input.context.dump().find("PRIVATE") == std::string::npos && input.context.dump().find("secret-id") == std::string::npos, "Snapshot excludes free text and record IDs");
         check(input.minimum[1].expensesCents == 30000, "Known bills supply a minimum spending floor");
+        check(input.context["projectionWindows"][0]["days"] == 5, "Current month has exactly five remaining days");
+        check(input.context["history"][2]["netCents"] == 90000 && input.context["history"][2]["isPartialMonth"] == true, "Summary distinguishes recorded income, net and partial months");
+        check(input.context["history"][2]["categorySpending"][0]["category"] == "custom category", "Monthly category history anonymizes custom names");
         int calls = 0;
         auto send = [&](const auto &host, const auto &method, const auto &path, const auto &body, const auto &key) {
             calls++;
@@ -40,6 +44,8 @@ int main() {
         check(result["source"] == "gemini" && result["model"] == "gemini-test", "Valid response accepted");
         check(result["months"][3]["projectedBalanceCents"] == input.baseline[3].projectedBalanceCents, "Balances calculated by C++");
         check(result["projectedExpenses"].size() == 3, "All chart granularities supplied");
+        check(result["projectedIncome"]["monthly"][1]["amountCents"] == input.baseline[1].incomeCents, "Future income reaches the chart");
+        check(result["months"][0]["explanation"].is_string(), "Validated per-month rationale reaches the UI");
         check(result.dump().find("secret-key") == std::string::npos, "Response never includes credentials");
         check(ai.analyze("alice", input)["cached"] == true && calls == 1, "Same account and snapshot reuse cache");
         check(ai.analyze("bob", input)["cached"] == false && calls == 2, "Different account does not receive cached result");
@@ -60,7 +66,7 @@ int main() {
         }
         GeminiForecastService timeout({"key", "gemini-test"}, [](const auto &, const auto &, const auto &, const auto &, const auto &) -> HttpResult { throw ApiError(502, "secret transport detail"); });
         check(timeout.analyze("alice", input)["reason"] == "unavailable", "Network errors fall back");
-        for (int bad = 0; bad < 9; bad++) {
+        for (int bad = 0; bad < 12; bad++) {
             auto value = candidate(input);
             if (bad == 0) value["months"][0]["expensesCents"] = -1;
             if (bad == 1) value["months"][0]["expensesCents"] = 1.5;
@@ -71,6 +77,9 @@ int main() {
             if (bad == 6) value["risks"] = Json::object();
             if (bad == 7) value["months"][0]["expensesCents"] = 18446744073709551615ULL;
             if (bad == 8) value["suggestions"] = {"1", "2", "3", "4", "5"};
+            if (bad == 9) value["months"][0]["expensesCents"] = input.baseline[0].expensesCents / 5;
+            if (bad == 10) value["months"][1].erase("explanation");
+            if (bad == 11) value["months"][1]["explanation"] = std::string(401, 'x');
             GeminiForecastService invalid({"key", "gemini-test"}, [value](const auto &, const auto &, const auto &, const auto &, const auto &) { return reply(value); });
             check(invalid.analyze("alice", input)["reason"] == "invalid_response", "Untrusted model output rejected");
         }

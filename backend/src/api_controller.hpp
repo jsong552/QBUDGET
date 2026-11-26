@@ -434,17 +434,21 @@ class ApiController {
         auto projection = forecasts.series(months, now, mode);
         Json summary = {
             {"projectedIncomeCents", income},
-            {"projectedIncomeCaption", "30-day trend or known recurring income"},
+            {"projectedIncomeCaption", forecasts.monthlyIncomeBaseline(ledger(), now)
+                ? "Prior two full months; scheduled income is a floor"
+                : "30-day income trend; may include one-off payments"},
             {"projectedExpensesCents", expenses},
             {"projectedExpensesCaption", "30-day trend, at least known payments"},
             {"projectedBalanceCents", months.back().projectedBalanceCents},
             {"projectedBalanceCaption", "Estimate through " + now.startOfMonth(4).addDays(-1).str()},
             {"termLabel", "Current four-month term"}};
         Json series = {{"granularity", mode},
+                       {"asOf", now},
                        {"income", ledger().points(term(), mode, true)},
                        {"expenses", ledger().points(term(), mode, false)},
+                       {"projectedIncome", forecasts.series(months, now, mode, true)},
                        {"projectedExpenses", projection}};
-        Json monthly = {{"description", "Forecast uses the last 30 days, with known payments and recurring "
+        Json monthly = {{"asOf", now}, {"description", "The current row covers only the remaining days; later rows are full months. Spending uses the last 30 days, with known payments and recurring "
                                         "entries as a floor. Estimates are not guarantees."},
                         {"months", months}};
         if (req.path == "/api/forecast") {

@@ -21,7 +21,12 @@ const standard: ForecastView = {
 }
 const generated: AiForecast = { source: 'gemini', reason: '', message: '', asOf: '2026-11-25', model: 'gemini-test',
   generatedAt: 1795600000, cached: false, summary: 'Spending is likely to rise.', risks: ['Rent is due soon.'], suggestions: ['Review optional spending.'], assumptions: ['Income stays steady.'],
-  months: [{ month: '2026-12-01', incomeCents: 10000, expensesCents: 7000, projectedBalanceCents: 3000 }],
+  months: [{ month: '2026-12-01', incomeCents: 10000, expensesCents: 7000, projectedBalanceCents: 3000, explanation: 'December follows recent grocery spending.' }],
+  snapshot: { currentBalanceCents: 90000, budgetsIncluded: 0, goalsIncluded: 0, history: [
+    { start: '2026-11-01', endExclusive: '2026-11-26', isPartialMonth: true, recordCount: 7,
+      incomeCents: 180000, expensesCents: 122095, netCents: 57905,
+      categorySpending: [{ category: 'groceries', expensesCents: 25105 }] },
+  ] },
   projectedExpenses: { monthly: [{ date: '2026-12-01', amountCents: 7000 }], weekly: [{ date: '2026-11-30', amountCents: 1750 }], semester: [{ date: '2026-09-01', amountCents: 7000 }] },
 }
 let root: Root
@@ -70,8 +75,13 @@ it('only sends budget analysis when requested, then updates cards, chart and tab
   expect(aiCalls()).toHaveLength(1)
   expect(aiCalls()[0][1].headers.Authorization).toBe('Bearer firebase-test-token')
   expect(aiCalls()[0][1].body).toBe('{}')
-  expect(container.textContent).toContain('Spending is likely to rise.')
+  expect(container.textContent).toContain('Largest spending category')
   expect(container.textContent).toContain('Review optional spending.')
+  expect(container.textContent).toContain('December follows recent grocery spending.')
+  expect(container.textContent).toContain('Nov to date')
+  expect(container.textContent).toContain('$1,800.00')
+  expect(container.textContent).toContain('$579.05')
+  expect(container.textContent).toContain('No category budgets set.')
   expect(container.textContent).toContain('Gemini spending estimate')
   expect(container.querySelector('[data-testid="projection"]')?.textContent).toContain('7000')
   expect(container.querySelector('tbody')?.textContent).toContain('70.00')
@@ -95,7 +105,7 @@ it('keeps the standard forecast after quota or invalid-response fallback', async
   await click('Generate AI forecast')
   expect(container.textContent).toContain('Usage limit reached.')
   expect(container.querySelector('[data-testid="projection"]')?.textContent).toContain('5000')
-  expect(container.textContent).not.toContain('Spending is likely to rise.')
+  expect(container.textContent).not.toContain('Largest spending category')
 })
 it('shows authentication errors and allows retry without hiding the standard forecast', async () => {
   generate = async () => json({ error: 'Please sign in again.' }, 401)
@@ -115,20 +125,34 @@ it('prevents duplicate clicks and discards pending AI output when budget data ch
   expect(aiCalls()).toHaveLength(1)
   await act(async () => window.dispatchEvent(new Event('qbudget:data-changed')))
   await act(async () => resolve(json(generated)))
-  expect(container.textContent).not.toContain('Spending is likely to rise.')
+  expect(container.textContent).not.toContain('Largest spending category')
   expect(container.querySelector('[data-testid="projection"]')?.textContent).toContain('5000')
 })
 it('clears an existing AI forecast after recurring entries are generated', async () => {
   await mount()
   await click('Generate AI forecast')
   await act(async () => window.dispatchEvent(new Event('qbudget:transactions-generated')))
-  expect(container.textContent).not.toContain('Spending is likely to rise.')
+  expect(container.textContent).not.toContain('Largest spending category')
   expect(container.querySelector('[data-testid="projection"]')?.textContent).toContain('5000')
 })
 it('renders model text safely as text', async () => {
-  generate = async () => json({ ...generated, summary: '<img src=x onerror=alert(1)>' })
+  generate = async () => json({ ...generated, risks: ['<img src=x onerror=alert(1)>'] })
   await mount()
   await click('Generate AI forecast')
   expect(container.textContent).toContain('<img src=x onerror=alert(1)>')
   expect(container.querySelector('img')).toBeNull()
+})
+
+it('calculates headline category and cash flow instead of repeating incorrect model prose', async () => {
+  const history = generated.snapshot!.history.map((month) => ({ ...month,
+    categorySpending: [{ category: 'groceries', expensesCents: 25105 }, { category: 'rent', expensesCents: 85000 }],
+  }))
+  generate = async () => json({ ...generated, summary: 'Groceries is the largest expense.', snapshot: { ...generated.snapshot, history } })
+  await mount()
+  await click('Generate AI forecast')
+  const facts = container.querySelector('[aria-label="Budget summary facts"]')?.textContent
+  expect(facts).toContain('Rent')
+  expect(facts).toContain('$850.00')
+  expect(facts).toContain('$30.00 net')
+  expect(facts).not.toContain('Groceries is the largest')
 })

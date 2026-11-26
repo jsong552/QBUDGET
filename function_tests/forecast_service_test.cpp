@@ -162,6 +162,31 @@ int main() {
               "Nov and Dec both fall in the fall semester");
     });
 
+    test("Current-month income spikes are not repeated when two full months are available", [&] {
+        Date date("2026-11-25");
+        Ledger history({entry("2026-09-01", 180000), entry("2026-10-01", 180000), entry("2026-11-01", 180000), entry("2026-11-25", 1000000)}, date);
+        auto result = service.forecast(history, {}, {}, date);
+        check(result[0].incomeCents == 0 && result[1].incomeCents == 180000, "Already-received monthly pay is not predicted again; windfall not extrapolated");
+        check(result[2].incomeCents == 180000 && result[3].incomeCents == 180000, "Monthly income stays consistent across month lengths");
+        auto nextPay = schedule("2026-12-01", 220000, RecurrenceFrequency::Monthly);
+        auto scheduled = service.forecast(history, {}, {nextPay}, date);
+        check(scheduled[1].incomeCents == 220000, "Known future pay still overrides a lower historical estimate");
+    });
+
+    test("Income chart keeps cents and month-end zero points use the active bucket", [&] {
+        std::vector<ForecastMonth> months = {{Date("2026-11-01"), 10001, 5000, 5001}};
+        auto weekly = service.series(months, Date("2026-11-25"), "weekly", true);
+        MoneyCents total = 0;
+        for (const auto &point : weekly) total += point.amountCents;
+        check(total == 10001 && weekly.size() == 2, "Income uses the five remaining days without losing cents");
+        months[0].incomeCents = 0;
+        months[0].expensesCents = 0;
+        auto lastDay = service.series(months, Date("2026-11-30"), "weekly");
+        check(lastDay.size() == 1 && lastDay[0].date == Date("2026-11-30"), "Month-end zero stays in its current week");
+        auto term = service.series(months, Date("2026-11-30"), "semester");
+        check(term[0].date == Date("2026-09-01"), "Month-end zero stays in its current term");
+    });
+
     std::cout << '\n' << checks - failures << '/' << checks << " ForecastService checks passed.\n";
     return failures == 0 ? 0 : 1;
 }

@@ -10,7 +10,8 @@ export function applyAiForecast(summary: ForecastSummary | undefined, series: Fo
       projectedExpensesCents: ai.months.reduce((sum, month) => sum + month.expensesCents, 0),
       projectedExpensesCaption: 'Gemini spending estimate', projectedBalanceCents: ai.months.at(-1)!.projectedBalanceCents,
       projectedBalanceCaption: 'Balance using Gemini spending estimates' },
-    series: { ...series, projectedExpenses: ai.projectedExpenses[granularity] },
-    breakdown: { description: 'Gemini spending estimates. The current month covers remaining days; later months are full months.', months: ai.months },
+    series: { ...series, asOf: ai.asOf, projectedExpenses: ai.projectedExpenses[granularity],
+      projectedIncome: ai.projectedIncome?.[granularity] ?? series.projectedIncome },
+    breakdown: { asOf: ai.asOf, description: 'Remaining cash flow this month, then full-month estimates. Balance carries forward your recorded income minus expenses.', months: ai.months },
   }
 }
