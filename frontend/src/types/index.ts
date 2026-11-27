@@ -295,7 +295,8 @@ export interface ProfileInput {
 }
 
 export type ThemePreference = 'light' | 'dark' | 'system'
-export type CurrencyCode = 'CAD' | 'USD'
+/** Money is stored and shown in CAD only; the backend rejects other currencies (relabelling is not conversion). */
+export type CurrencyCode = 'CAD'
 export type WeekStart = 'sunday' | 'monday'
 export type DateFormatPreference = 'MMM_DD_YYYY' | 'DD_MM_YYYY' | 'YYYY_MM_DD'
 
@@ -313,6 +314,8 @@ export interface NotificationPreference {
   title: string
   description: string
   enabled: boolean
+  /** False while the app doesn't send this kind of notification yet; its switch is disabled until it does. */
+  available: boolean
 }
 
 // ---------- Notifications ----------

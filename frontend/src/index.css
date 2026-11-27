@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* `dark:` utilities follow the app's theme setting (the `dark` class on <html>), not only the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* static: emit every token so charts can read them as CSS variables */
 @theme static {
   --font-sans: "DM Sans", system-ui, sans-serif;
@@ -49,7 +52,61 @@
   --shadow-card: 0 1px 3px rgb(18 35 74 / 0.06), 0 1px 2px rgb(18 35 74 / 0.03);
 }
 
+/*
+ * Dark theme: the same tokens with dark values, switched on by the `dark` class on <html> (see src/lib/theme.ts).
+ * Components keep using the same token classes, so they need no dark-specific styles. Every text/background pair
+ * the app uses meets WCAG AA contrast (4.5:1), and chart lines and toggles meet 3:1.
+ */
+:root.dark {
+  color-scheme: dark;
+
+  --color-canvas: #0a101d;
+  --color-surface: #121a2b;
+  --color-surface-muted: #1a2437;
+  --color-surface-disabled: #182030;
+  --color-line: #253047;
+  --color-line-strong: #3a4963;
+
+  --color-ink: #e6ebf4;
+  --color-muted: #a3aec2;
+  --color-subtle: #7d899e;
+
+  --color-sidebar: #13284c;
+  --color-sidebar-raised: #24406f;
+  --color-sidebar-active: #21407a;
+  --color-on-sidebar: #ffffff;
+  --color-on-sidebar-muted: #dfe6f3;
+
+  /* Still a fill behind white text (buttons, the balance card, toggles); text in this colour uses primary-text. */
+  --color-primary: #3463bd;
+  --color-primary-hover: #2d579f;
+  --color-on-primary: #ffffff;
+  --color-primary-text: #93b6f7;
+
+  --color-accent: #f5c116;
+  --color-accent-soft: #3a3114;
+  --color-accent-ink: #f3cf5c;
+  --color-on-accent: #12234a;
+
+  --color-danger: #f0566f;
+  --color-danger-soft: #3b1b25;
+
+  --color-success: #33c07a;
+  --color-success-soft: #123222;
+
+  --color-info: #4f8cf2;
+  --color-info-soft: #162543;
+  --color-info-light: #86ade8;
+
+  --color-plum: #b493f2;
+  --color-plum-soft: #2c2444;
+
+  --color-quiet: #717d92;
+  --color-quiet-soft: #222c3e;
+}
+
 :root {
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -58,4 +115,30 @@
 body {
   margin: 0;
   @apply bg-canvas font-sans text-ink;
+}
+
+/*
+ * Dark-mode exceptions, for places where one token can't be right in both themes. These are kept here so
+ * components need no changes.
+ */
+
+/* Primary is a deep-blue fill, too dark to read as text on dark cards, so text in it gets a lighter tint. */
+.dark .text-primary {
+  color: var(--color-primary-text);
+}
+
+/* A soft background colour used as text on the navy sidebar (dev backend page) needs a light tint instead. */
+.dark .text-danger-soft {
+  color: #fdb4c1;
+}
+
+/* shadow-card is compiled with its navy shadow colour built in, which can't be seen on dark backgrounds.
+   Only --tw-shadow is replaced, so ring utilities used alongside it keep working. */
+.dark .shadow-card {
+  --tw-shadow: 0 1px 3px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+
+/* Dialog backdrops are tinted with ink, which is near-white in dark mode; use a dark scrim instead. */
+.dark dialog::backdrop {
+  background-color: rgb(0 0 0 / 0.6);
 }

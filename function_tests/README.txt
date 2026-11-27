@@ -271,16 +271,61 @@ ProfileService and SettingsService test (profile_settings_test.cpp)
 3. Save a full name and student ID.
    Output: those come back instead.
 4. Default settings.
-   Output: light theme, CAD, week starts Sunday, email reminders off,
-   1 day lead time, only payment reminders on.
+   Output: system theme (follows the device's light/dark setting), CAD,
+   week starts Sunday, email reminders off, 1 day lead time, only payment
+   reminders on.
 5. Save dark theme and Monday.
    Output: saved.
-6. Save "3 days" lead time.
+6. Saved display settings that have no theme.
+   Output: the theme falls back to system, and the other saved settings
+   are kept.
+7. Themes "light", "dark", "system", then "purple", "" and "Dark".
+   Output: the first three are accepted, the last three are rejected.
+8. Save "3 days" lead time.
    Output: saved.
-7. Turn on email reminders.
+9. Turn on email reminders.
    Output: rejected for now, because email isn't set up in the backend.
-8. Turn off payment reminders and turn on goal updates.
-   Output: saved.
+10. Turn off payment reminders and turn on goal updates.
+    Output: saved.
+11. Save "  Alex Johnson " with student ID " 20231234 ".
+    Output: saved as "Alex Johnson" and "20231234".
+12. Save a student ID of only spaces.
+    Output: the student ID is cleared.
+13. Full name "", spaces only, or a tab and line break.
+    Output: rejected with "Enter your full name."
+14. Full name of 100 letters, 101 letters, and 100 accented letters
+    (200 bytes).
+    Output: 100 is fine, 101 is rejected, and the accented name is fine
+    because the limit counts characters, not bytes.
+15. Full name with a line break or a tab inside it.
+    Output: rejected.
+16. Student ID "20231234", then 7 digits, 9 digits, one with a letter and
+    one with a space.
+    Output: only "20231234" is accepted ("must be exactly 8 digits").
+17. A rejected profile.
+    Output: nothing is saved; the sign-in name is still used.
+18. A profile saved under older rules ("  Old Name  ", "ABC 12").
+    Output: it still loads unchanged.
+19. A number sent as the name or as the student ID.
+    Output: rejected with the same clear messages.
+20. Theme "purple", date format "MM_DD_YYYY" or reminder timing
+    "2_weeks" saved directly through the service.
+    Output: all rejected, nothing saved.
+21. The notification list.
+    Output: four types in order; only payment reminders is available,
+    and it's on by default.
+22. Switch payment reminders off, then on.
+    Output: both saved.
+23. Switch on forecast updates, goal updates or product announcements.
+    Output: rejected ("... aren't available yet"), nothing saved.
+24. An unknown notification type.
+    Output: 404.
+25. The notification routes: list, then "enabled" sent as text or left
+    out, then a real change.
+    Output: the list shows availability, the two bad requests get "Send
+    enabled as true or false.", and the real change is saved.
+26. Save "  Sam Lee " with a blank student ID through the API.
+    Output: "Sam Lee", initials "SL", no student ID.
 
 
 AuthService test (auth_service_test.cpp)
@@ -300,6 +345,53 @@ AuthService test (auth_service_test.cpp)
    Output: 502.
 7. No user found, or the account is disabled.
    Output: 401.
+8. Decode "aGVsbG8", "_-8" and "a$b" (the text format inside login
+   tokens).
+   Output: "hello", the two bytes FF EF, and nothing for the invalid one.
+9. Tokens with a sign-in time, without one, not a token at all, and
+   garbled.
+   Output: the sign-in time (1764060000) for the first, 0 (unknown) for
+   the rest.
+10. Delete a user's sign-in.
+    Output: the request goes to Firebase's accounts:delete with the key
+    and the user's token.
+11. Firebase says the user doesn't exist (already deleted).
+    Output: no error, so a retry can finish.
+12. Firebase says the login is too old.
+    Output: 403, "For your security, sign in again before deleting your
+    account."
+13. Firebase says the token is invalid, Firebase is down, or no API key.
+    Output: 401, 502 and 503.
+
+
+Account deletion test (account_deletion_test.cpp)
+-------------------------------------------------
+Deleting a whole account (DELETE /api/me). It deletes every record, then
+the profile, then the Firebase sign-in.
+
+1. Make records of every kind through the app (a custom category,
+   transactions, a budget, a goal, a calendar payment that was paid, a
+   recurring schedule and its transactions, a bursary, a fee, a semester
+   plan, all settings and the profile), then delete the account.
+   Output: nothing is left anywhere, and the sign-in is deleted once,
+   only after all the data is gone.
+2. Delete with a sign-in from 5 minutes ago.
+   Output: 403 ("sign in again"), and nothing is deleted.
+3. Signed in exactly 4 minutes ago, 4 minutes 1 second ago, and an
+   unknown sign-in time.
+   Output: the first is allowed, the other two get 403.
+4. Delete an account that has no data.
+   Output: the sign-in is still deleted.
+5. Deleting the sign-in fails, then try again.
+   Output: the first try reports the error (the data is already gone),
+   and the second try deletes the sign-in.
+6. A server that wasn't given a way to delete sign-ins.
+   Output: 503, and nothing is deleted.
+7. Delete 501 transactions and the profile through the Firestore client.
+   Output: two batch requests (500, then 2), with the user's own login,
+   only under users/alice, and the profile last.
+8. Firestore refuses (rules not published).
+   Output: 403, "...Publish firestore.rules...".
 
 
 Date test (date_test.cpp)
@@ -378,14 +470,15 @@ To run all of them:
 Each test prints [PASS] for every test, then a total. When everything
 passes, the totals are:
 
-  auth_service_test          19/19 AuthService checks passed.
+  account_deletion_test      30/30 Account deletion checks passed.
+  auth_service_test          34/34 AuthService checks passed.
   budget_service_test        31/31 BudgetService checks passed.
   calendar_service_test      45/45 Calendar and Recurrence checks passed.
   category_service_test      30/30 CategoryService checks passed.
   date_test                  47/47 Date checks passed.
   forecast_service_test      33/33 ForecastService checks passed.
   notification_service_test  28/28 NotificationService checks passed.
-  profile_settings_test      15/15 Profile and Settings checks passed.
+  profile_settings_test      66/66 Profile and Settings checks passed.
   student_service_test       21/21 StudentService checks passed.
   transaction_service_test   39/39 TransactionService checks passed.
   validation_test            44/44 Validation checks passed.

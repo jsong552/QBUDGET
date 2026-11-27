@@ -61,10 +61,15 @@ inline Json document(const Json &data) {
 class FirestoreClient final : public DocumentStore {
     AuthenticatedUser identity;
     Transport transport;
-    std::string base;
+    std::string base;      // URL path of this user's document: /v1/projects/.../documents/users/{uid}
+    std::string commitUrl; // URL path for batched writes
+    std::string names;     // resource name of this user's document, used inside batched writes
     Json request(const std::string &method, const std::string &path, const Json &body = nullptr,
                  bool missing = false) const {
-        auto response = transport("firestore.googleapis.com", method, base + path,
+        return send(method, base + path, body, missing);
+    }
+    Json send(const std::string &method, const std::string &url, const Json &body, bool missing) const {
+        auto response = transport("firestore.googleapis.com", method, url,
                                   body.is_null() ? "" : body.dump(), identity.token);
         if (response.status == 404 && missing)
             return nullptr;
@@ -91,8 +96,10 @@ class FirestoreClient final : public DocumentStore {
         auto project = env("FIREBASE_PROJECT_ID", env("VITE_FIREBASE_PROJECT_ID").c_str());
         if (project.empty())
             throw ApiError(503, "Set the Firebase project ID for the backend.");
-        base = "/v1/projects/" + encode(project) + "/databases/(default)/documents/users/" +
-               encode(identity.uid);
+        auto documents = "/v1/projects/" + encode(project) + "/databases/(default)/documents";
+        base = documents + "/users/" + encode(identity.uid);
+        commitUrl = documents + ":commit";
+        names = "projects/" + project + "/databases/(default)/documents/users/" + identity.uid;
     }
     Json get(const std::string &path) const {
         auto data = request("GET", path, nullptr, true);
@@ -140,6 +147,16 @@ class FirestoreClient final : public DocumentStore {
     }
     void remove(const std::string &path) const {
         request("DELETE", path);
+    }
+    // Up to 500 deletes per commit (Firestore's limit), so a large account takes a few requests, not one per record.
+    // Each commit is all-or-nothing, and security rules are still checked for every record.
+    void removeAll(const std::vector<std::string> &paths) const override {
+        for (size_t start = 0; start < paths.size(); start += 500) {
+            Json writes = Json::array();
+            for (size_t i = start; i < paths.size() && i < start + 500; i++)
+                writes.push_back({{"delete", names + paths[i]}});
+            send("POST", commitUrl, {{"writes", writes}}, false);
+        }
     }
 };
 } // namespace qbudget

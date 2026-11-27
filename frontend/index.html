@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Shows the theme last used on this device before the app loads, so dark mode never flashes white.
+      // Mirrors src/lib/theme.ts (storage key, values, "system" default); theme.test.ts checks that they agree.
+      (function () {
+        var theme = null
+        try {
+          theme = localStorage.getItem('qbudget.theme')
+        } catch (e) {
+          // Storage is blocked; fall back to the default.
+        }
+        if (theme !== 'light' && theme !== 'dark') theme = 'system'
+        var dark = theme === 'dark' || (theme === 'system' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      })()
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

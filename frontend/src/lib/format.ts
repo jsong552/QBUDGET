@@ -1,4 +1,5 @@
-import type { IsoDate } from '../types'
+import type { DateFormatPreference, IsoDate } from '../types'
+import { getDateFormat } from './dateFormat'
 
 interface MoneyOptions {
   /** Show the cents part. Defaults to true. */
@@ -27,7 +28,7 @@ export function formatMoney(amountCents: number, { cents = true }: MoneyOptions 
 }
 
 export type DateStyle =
-  | 'medium' // Sep 10, 2024
+  | 'medium' // full date in the user's chosen format: Sep 10, 2024 / 10/09/2024 / 2024-09-10
   | 'short' // Sep 10
   | 'monthDay' // October 1
   | 'month' // September
@@ -51,8 +52,22 @@ export function parseIsoDate(date: IsoDate): Date {
   return new Date(Date.UTC(year, month - 1, day))
 }
 
+/** `medium` (the default) follows the user's date format setting; the spelled-out styles are the same for everyone. */
 export function formatDate(date: IsoDate, style: DateStyle = 'medium'): string {
+  if (style === 'medium') return formatFullDate(date, getDateFormat())
   return new Intl.DateTimeFormat('en-US', { ...dateOptions[style], timeZone: 'UTC' }).format(parseIsoDate(date))
+}
+
+/** A full date in `format`: "Sep 10, 2024", "10/09/2024" or "2024-09-10". */
+export function formatFullDate(date: IsoDate, format: DateFormatPreference): string {
+  const value = parseIsoDate(date)
+  if (format === 'MMM_DD_YYYY') return new Intl.DateTimeFormat('en-US', { ...dateOptions.medium, timeZone: 'UTC' }).format(value)
+  // Reject bad dates the same way Intl does above, so behaviour doesn't depend on the chosen format.
+  if (Number.isNaN(value.getTime())) throw new RangeError('Invalid time value')
+  const year = String(value.getUTCFullYear()).padStart(4, '0')
+  const month = String(value.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(value.getUTCDate()).padStart(2, '0')
+  return format === 'DD_MM_YYYY' ? `${day}/${month}/${year}` : `${year}-${month}-${day}`
 }
 
 export function formatDaysAway(days: number): string {
@@ -87,11 +102,14 @@ export function localTodayIso(): IsoDate {
 /**
  * Range whose end date is exclusive (as the API sends it), shown with the last included day:
  * ("2024-09-01", "2024-10-01") -> "Sep 1 – Sep 30, 2024"; the start keeps its year when the years differ.
+ * Numeric date formats show both ends in full: "01/09/2024 – 30/09/2024" or "2024-09-01 – 2024-09-30".
  */
 export function formatDateRange(start: IsoDate, endExclusive: IsoDate): string {
   const last = parseIsoDate(endExclusive)
   last.setUTCDate(last.getUTCDate() - 1)
   const lastDay = last.toISOString().slice(0, 10)
+  const format = getDateFormat()
+  if (format !== 'MMM_DD_YYYY') return `${formatFullDate(start, format)} – ${formatFullDate(lastDay, format)}`
   const sameYear = start.slice(0, 4) === lastDay.slice(0, 4)
   return `${formatDate(start, sameYear ? 'short' : 'medium')} – ${formatDate(lastDay)}`
 }

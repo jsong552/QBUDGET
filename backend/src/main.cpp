@@ -47,7 +47,9 @@ int main() {
             auto identity = qbudget::AuthService{}.authenticate(req.get_header_value("Authorization"));
             auto today = qbudget::requestDate(req);
             qbudget::FirestoreClient database(identity);
-            auto result = qbudget::ApiController(database, identity, today).handle(req);
+            auto result = qbudget::ApiController(database, identity, today, [](const qbudget::AuthenticatedUser &user) {
+                              qbudget::AuthService{}.deleteSignIn(user);
+                          }).handle(req);
             res.set_header("Cache-Control", "no-store");
             if (result.is_null())
                 res.status = 204;

@@ -46,6 +46,9 @@ published the old version already. New categories, budgets, recurring, bursaries
 fees and semester-settings collections need these rules. Transaction notes and
 recurrence markers and event paid state are also supported. The code has not
 published rules or changed your live Firebase project automatically.
+Account deletion also needs the current rules: they let a user delete their own
+category documents. Without them, deleting an account fails with "Firestore denied
+access" before anything is deleted.
 
 New accounts start empty with built-in categories. Old records remain readable;
 new optional fields have defaults and historical category IDs are retained.
@@ -57,9 +60,9 @@ per collection. There is no claim of one-second deployed response time.
 
 Recurring processing runs on application startup, schedule save and explicit sync;
 there is no background job. Calendar payments can be edited, deleted or marked paid.
-They do not automatically create actual transactions. Email delivery, account deletion,
-avatars, some display options, official tuition lookup, rent maps and discounts remain
-incomplete. The requirements status file records these limits explicitly.
+They do not automatically create actual transactions. Email delivery, avatars, official
+tuition lookup, rent maps and discounts remain incomplete. The [Settings guide](settings.md)
+lists the Settings page's limits.
 
 ## Deployment and native builds
 

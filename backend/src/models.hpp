@@ -22,7 +22,10 @@ enum class BursaryStatus { Applied, Approved, Received };
 enum class FeeStatus { Kept, OptedOut };
 struct AuthenticatedUser {
     std::string uid, email, name, token;
+    std::int64_t signedInAt = 0; // when the user last actually signed in (Unix seconds); 0 if unknown
 };
+/** Shown when an action (deleting the account) needs a fresh sign-in, as Firebase requires. */
+inline constexpr const char *recentSignInMessage = "For your security, sign in again before deleting your account.";
 struct UserProfile {
     std::string fullName;
     std::optional<std::string> studentId;
@@ -137,7 +140,8 @@ struct ForecastMonth {
     MoneyCents incomeCents, expensesCents, projectedBalanceCents;
 };
 struct DisplayPreferences {
-    std::string theme = "light", currency = "CAD", weekStart = "sunday", dateFormat = "MMM_DD_YYYY";
+    // "system" follows the device's light/dark setting until the user picks a theme.
+    std::string theme = "system", currency = "CAD", weekStart = "sunday", dateFormat = "MMM_DD_YYYY";
 };
 struct ReminderSettings {
     bool emailEnabled = false;

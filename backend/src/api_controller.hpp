@@ -2,6 +2,7 @@
 // response shapes.
 #pragma once
 #include "httplib.h"
+#include "account_service.hpp"
 #include "budget_service.hpp"
 #include "forecast_service.hpp"
 #include "student_service.hpp"
@@ -12,6 +13,8 @@ namespace qbudget {
 class ApiController {
     AuthenticatedUser user;
     Date now;
+    const DocumentStore &database;
+    std::function<void(const AuthenticatedUser &)> deleteSignIn; // deletes the Firebase sign-in (see main.cpp)
     TransactionRepository transactionRepository;
     CategoryRepository categoryRepository;
     BudgetRepository budgetRepository;
@@ -332,6 +335,12 @@ class ApiController {
                 return userView(profiles.get(user));
             if (req.method == "PUT" || req.method == "POST")
                 return userView(profiles.update(body(req).get<UserProfile>()));
+            if (req.method == "DELETE") {
+                if (!deleteSignIn)
+                    throw ApiError(503, "Account deletion is not configured on this server.");
+                AccountService(database).deleteAccount(user, deleteSignIn);
+                return nullptr;
+            }
         }
         if (req.path == "/api/me/preferences") {
             if (req.method == "GET")
@@ -343,31 +352,13 @@ class ApiController {
                 return nullptr;
             }
         }
-        if (req.path == "/api/me/notification-preferences" && req.method == "GET") {
-            auto value = settings.notifications();
-            return Json::array({{{"key", "payment_reminders"},
-                                 {"title", "Payment reminders"},
-                                 {"description", "Upcoming payments in the app"},
-                                 {"enabled", value.paymentReminders}},
-                                {{"key", "forecast_updates"},
-                                 {"title", "Forecast updates"},
-                                 {"description", "Not yet available"},
-                                 {"enabled", false}},
-                                {{"key", "goal_updates"},
-                                 {"title", "Goal updates"},
-                                 {"description", "Not yet available"},
-                                 {"enabled", false}},
-                                {{"key", "product_announcements"},
-                                 {"title", "Product announcements"},
-                                 {"description", "Not yet available"},
-                                 {"enabled", false}}});
-        }
+        if (req.path == "/api/me/notification-preferences" && req.method == "GET")
+            return settings.notificationOptions();
         if (req.path.rfind("/api/me/notification-preferences/", 0) == 0 && req.method == "PATCH") {
             auto key = suffix(req.path, "/api/me/notification-preferences");
-            require(key == "payment_reminders", "Only payment reminders are available.");
-            auto value = settings.notifications();
-            value.paymentReminders = body(req).at("enabled").get<bool>();
-            settings.saveNotifications(value);
+            auto value = body(req);
+            require(value.contains("enabled") && value["enabled"].is_boolean(), "Send enabled as true or false.");
+            settings.setNotification(key, value["enabled"].get<bool>());
             return nullptr;
         }
         throw ApiError(404, "Unknown profile endpoint.");
@@ -473,8 +464,10 @@ class ApiController {
 
   public:
     ApiController(const DocumentStore &db, AuthenticatedUser identity, Date date = Date::current(),
+                  std::function<void(const AuthenticatedUser &)> signInDeleter = nullptr,
                   GeminiForecastService &ai = sharedGeminiForecast())
-        : user(std::move(identity)), now(date), transactionRepository(db), categoryRepository(db),
+        : user(std::move(identity)), now(date), database(db), deleteSignIn(std::move(signInDeleter)),
+          transactionRepository(db), categoryRepository(db),
           budgetRepository(db), goalRepository(db), eventRepository(db), recurringRepository(db),
           bursaryRepository(db), feeRepository(db), profileRepository(db), settingsRepository(db),
           categories(categoryRepository), transactions(transactionRepository, categories),
@@ -506,7 +499,7 @@ class ApiController {
             {std::regex(R"(/api/semester/rates)"), "GET"},
             {std::regex(R"(/api/(bursaries|fees))"), "GET POST"},
             {std::regex(R"(/api/(bursaries|fees)/.+)"), "PUT DELETE"},
-            {std::regex(R"(/api/me)"), "GET PUT POST"},
+            {std::regex(R"(/api/me)"), "GET PUT POST DELETE"},
             {std::regex(R"(/api/me/preferences)"), "GET PATCH"},
             {std::regex(R"(/api/me/notification-preferences)"), "GET"},
             {std::regex(R"(/api/me/notification-preferences/.+)"), "PATCH"},
