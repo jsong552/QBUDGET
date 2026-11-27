@@ -5,6 +5,8 @@ services:
       context: ./backend
     env_file:
       - ./frontend/.env
+      - path: ./backend/.env
+        required: false
     environment:
       PORT: "8080"
       FRONTEND_ORIGIN: http://localhost:5173

@@ -51,7 +51,8 @@ export async function apiRequest<T>(path: string, { method = 'GET', body, timeou
     throw new ApiError(response.status, typeof payload?.error === 'string' ? payload.error : `API returned HTTP ${response.status}`)
   }
 
-  if (method !== 'GET' && typeof window !== 'undefined') {
+  // AI analysis is a read-only POST; it must not invalidate its own pending result.
+  if (method !== 'GET' && path !== '/forecast/ai' && typeof window !== 'undefined') {
     window.dispatchEvent(new Event('qbudget:data-changed'))
   }
   if (response.status === 204) {

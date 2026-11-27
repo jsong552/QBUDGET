@@ -2,6 +2,7 @@
 
 Calendar features and payment-recording behavior: [Calendar guide](docs/calendar.md).
 Settings page features (theme, date format, profile rules, notifications, account deletion): [Settings guide](docs/settings.md).
+Optional Gemini forecasts, server-key setup and tests: [Gemini guide](docs/gemini.md).
 
 React + TypeScript + Tailwind frontend, with a separate C++ HTTP API.
 Firebase email/password authentication is implemented; add your web app settings in
