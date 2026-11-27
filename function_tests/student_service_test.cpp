@@ -140,15 +140,15 @@ int main() {
         check(summary.plannedCostsCents == 2000, "Only the kept fee is a cost");
     });
 
-    test("Only this semester's unpaid, non-tuition items are counted", [] {
-        Setup s;
-        s.service.addFee(fee("Last year's fee", 9000, FeeStatus::Kept, "2026-04-01"));
-        auto summary = s.service.summary(now, {event("rent", "2026-11-20", 90000, true),
-                                               event("tuition", "2026-12-01", 500000),
-                                               event("rent", "2027-01-15", 90000)});
-        check(summary.plannedCostsCents == 0, "Paid, tuition-type and next-term items all skipped");
-        check(summary.scheduledCostsCents == 0, "No scheduled costs");
-    });
+    test("All this semester's non-tuition items are counted, paid or not", [] {
+    Setup s;
+    s.service.addFee(fee("Last year's fee", 9000, FeeStatus::Kept, "2026-04-01"));
+    auto summary = s.service.summary(now, {event("rent", "2026-11-20", 90000, true),
+                                           event("tuition", "2026-12-01", 500000),
+                                           event("rent", "2027-01-15", 90000)});
+    check(summary.scheduledCostsCents == 90000, "Paid November rent still counts");
+    check(summary.plannedCostsCents == 90000, "Tuition-type and next-term items skipped");
+});
 
     std::cout << '\n' << checks - failures << '/' << checks << " StudentService checks passed.\n";
     return failures == 0 ? 0 : 1;

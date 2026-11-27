@@ -48,6 +48,31 @@ class CalendarPlanner {
         });
         return result;
     }
+    std::vector<CalendarEvent> eventsIn(const DateRange &range) const {
+        std::map<std::string, Transaction> recorded;
+        for (const auto &t : transactions.list()) {
+            recorded[t.id] = t;
+        }
+
+        std::vector<CalendarEvent> result;
+        for (auto e: events.list()) {
+            if (range.contains(e.date)) {
+                e.paid = recorded.count("cal_" + e.id) > 0;
+                result.push_back(e);
+            }
+        }
+        for (const auto &entry: schedules.list()) {
+            if (entry.type == TransactionType::Income) {
+                continue;
+            }
+            for (auto date: RecurrenceService::occurrences(entry, range)) {
+                auto id = "rec_" + entry.id + "_" + date.str();
+                CalendarEvent e{id, entry.description, "recurring", date, entry.amountCents < 0 ? -entry.amountCents : entry.amountCents, true, recorded.count(id) > 0};
+                result.push_back(e);
+            }
+        }
+        return result;
+    }
     Json outstanding(Date now) const {
         Date start = now;
         for (const auto &e : events.list()) if (e.date < start) start = e.date;

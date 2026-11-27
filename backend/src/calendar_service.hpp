@@ -1,6 +1,7 @@
 // Scheduled payments and recurring transaction generation; deterministic dates support testing.
 #pragma once
 #include "transaction_service.hpp"
+#include <unordered_set>
 namespace qbudget {
 class CalendarService {
     EventRepository &repository;
@@ -145,6 +146,9 @@ class CalendarService {
         int sync(Date now) const {
             int created = 0;
             for (const auto &entry: list()) {
+                if (!entry.active) {
+                    continue;
+                }
                 std::vector<Date> dates;
                 try {
                     dates = occurrences(entry, {entry.startDate, now.addDays(1)});
@@ -155,6 +159,25 @@ class CalendarService {
                 if (dates.size() > 1000) {
                     continue; // very old schedule with too many entries
                 }
+                std::unordered_set<std::string> current;
+                for (const auto &date: dates) {
+                    current.insert("rec_" + entry.id + "_" + date.str());
+                }
+
+                for (auto row: transactions.list()) {
+                    if (row.recurrenceId != entry.id || row.voided) {
+                        continue;
+                    }
+                    if (!(row.date <= now)) {
+                        continue;
+                    }
+                    if (current.count(row.id)) {
+                        continue;
+                    }
+                    row.voided = true;
+                    transactions.save(row.id, row);
+                }
+
                 for (const auto &date: dates) {
                     Transaction row{
                         "", date, entry.description, entry.categoryId, entry.type, entry.amountCents,
