@@ -1,9 +1,12 @@
 /*
+ * File: student_service_test.cpp
  * Description: Function tests for StudentService (FR-13 to FR-17). Covers bursaries and their
  *              statuses, opt-out student fees, the default and saved semester plan, and the
- *              semester summary of expected income versus planned costs. Uses the in-memory
- *              test store.
+ *              semester summary of expected income versus planned costs, including recurring
+ *              costs inside and outside the semester through GET /api/semester. Uses the
+ *              in-memory test store.
  */
+#include "../backend/src/api_controller.hpp"
 #include "../backend/src/student_service.hpp"
 #include "../backend/tests/memory_store.hpp"
 #include <functional>
@@ -58,7 +61,39 @@ struct Setup {
     FeeRepository feeRepo{store};
     SettingsRepository settingsRepo{store};
     StudentService service{bursaryRepo, feeRepo, settingsRepo};
+    EventRepository eventRepo{store};
+    RecurringRepository recurringRepo{store};
 };
+
+RecurringEntry recurring(const std::string &description, MoneyCents amount, const std::string &start,
+                         RecurrenceFrequency frequency = RecurrenceFrequency::Monthly,
+                         std::optional<Date> end = std::nullopt, bool active = true) {
+    auto type = amount > 0 ? TransactionType::Income : TransactionType::Expense;
+    auto category = amount > 0 ? "income" : "rent";
+    return {"", description, category, type, amount, Date(start), end, frequency, active};
+}
+
+// Calls the real API route, the same way the Semester and Calendar pages do.
+Json call(const DocumentStore &store, const std::string &method, const std::string &path, const Json &data = nullptr,
+          const std::string &month = "") {
+    httplib::Request request;
+    request.method = method;
+    request.path = path;
+    request.body = data.dump();
+    if (!month.empty())
+        request.params.emplace("month", month);
+    return ApiController(store, {"uid1", "alex@example.com", "Alex Student", "token"}, now).handle(request);
+}
+
+// Expense total the Calendar page shows for one month.
+MoneyCents calendarExpenses(const DocumentStore &store, const std::string &month) {
+    MoneyCents total = 0;
+    auto view = call(store, "GET", "/api/calendar/events", nullptr, month);
+    for (const auto &row : view["events"])
+        if (row["type"] == "expense")
+            total += row["amountCents"].get<MoneyCents>();
+    return total;
+}
 } // namespace
 
 int main() {
@@ -141,14 +176,57 @@ int main() {
     });
 
     test("All this semester's non-tuition items are counted, paid or not", [] {
-    Setup s;
-    s.service.addFee(fee("Last year's fee", 9000, FeeStatus::Kept, "2026-04-01"));
-    auto summary = s.service.summary(now, {event("rent", "2026-11-20", 90000, true),
-                                           event("tuition", "2026-12-01", 500000),
-                                           event("rent", "2027-01-15", 90000)});
-    check(summary.scheduledCostsCents == 90000, "Paid November rent still counts");
-    check(summary.plannedCostsCents == 90000, "Tuition-type and next-term items skipped");
-});
+        Setup s;
+        s.service.addFee(fee("Last year's fee", 9000, FeeStatus::Kept, "2026-04-01"));
+        auto summary = s.service.summary(now, {event("rent", "2026-11-20", 90000, true),
+                                               event("tuition", "2026-12-01", 500000),
+                                               event("rent", "2027-01-15", 90000)});
+        check(summary.scheduledCostsCents == 90000, "Paid November rent still counts");
+        check(summary.plannedCostsCents == 90000, "Tuition-type and next-term items skipped");
+    });
+
+    // Regression tests for TEST_REPORT.md bug B6: the semester summary left out recurring costs.
+    // These go through GET /api/semester because the fix is in which payments the route passes in.
+    test("Semester summary counts recurring rent inside the semester", [] {
+        Setup s;
+        s.recurringRepo.add(recurring("Rent", -90000, "2026-09-01"));
+        auto summary = call(s.store, "GET", "/api/semester")["summary"];
+        check(summary["scheduledCostsCents"] == 360000, "Sep, Oct, Nov and Dec rent (Jan 1 is next term)");
+        check(summary["plannedCostsCents"] == 360000 && summary["remainingCents"] == -360000,
+              "Rent is in planned costs and remaining");
+        auto calendar = calendarExpenses(s.store, "2026-09-01") + calendarExpenses(s.store, "2026-10-01") +
+                        calendarExpenses(s.store, "2026-11-01") + calendarExpenses(s.store, "2026-12-01");
+        check(calendar == 360000, "Same total as the Calendar's Sep to Dec months");
+    });
+
+    test("Only recurring dates inside the semester count, and income isn't a cost", [] {
+        Setup s;
+        s.recurringRepo.add(recurring("Summer sublet", -70000, "2026-07-01", RecurrenceFrequency::Monthly,
+                                      Date("2026-10-15")));                                  // Sep 1, Oct 1 count
+        s.recurringRepo.add(recurring("Old lease", -85000, "2026-01-01", RecurrenceFrequency::Monthly,
+                                      Date("2026-08-01")));                                  // ended before Sep
+        s.recurringRepo.add(recurring("Winter rent", -90000, "2027-01-01"));                 // next term
+        s.recurringRepo.add(recurring("Gym", -2500, "2026-09-03", RecurrenceFrequency::Weekly,
+                                      std::nullopt, false));                                 // paused
+        s.recurringRepo.add(recurring("Paycheque", 120000, "2026-09-15"));                   // income
+        auto summary = call(s.store, "GET", "/api/semester")["summary"];
+        check(summary["scheduledCostsCents"] == 140000, "Only the sublet's Sep 1 and Oct 1 ($700 x 2)");
+        check(summary["expectedIncomeCents"] == 0, "The recurring paycheque isn't added to income or costs");
+    });
+
+    test("Paid and recorded payments are counted once, not twice", [] {
+        Setup s;
+        s.recurringRepo.add(recurring("Rent", -90000, "2026-09-01"));
+        call(s.store, "POST", "/api/recurring/sync"); // Sep, Oct, Nov rent become transactions
+        auto textbook = s.eventRepo.add({"", "Textbook", "other", Date("2026-12-12"), 6000, true, false});
+        call(s.store, "POST", "/api/calendar/pay", {{"source", "event"}, {"sourceId", textbook}, {"paidDate", "2026-11-08"}});
+        s.eventRepo.add({"", "Gym", "other", Date("2026-11-28"), 2500, true, false});
+        s.eventRepo.add({"", "Winter tuition", "tuition", Date("2026-12-01"), 500000, true, false});
+        auto summary = call(s.store, "GET", "/api/semester")["summary"];
+        check(call(s.store, "GET", "/api/transactions").size() == 4, "3 rent transactions and the textbook were recorded");
+        check(summary["scheduledCostsCents"] == 368500,
+              "4 x $900 rent + $60 textbook + $25 gym, each once; tuition left to the tuition estimate");
+    });
 
     std::cout << '\n' << checks - failures << '/' << checks << " StudentService checks passed.\n";
     return failures == 0 ? 0 : 1;

@@ -99,7 +99,7 @@ int main() {
         TransactionRepository(db).add(salary);
         httplib::Request request;
         request.method = "GET"; request.path = "/api/forecast/ai/status";
-        ApiController controller(db, {"route-user", "alice@example.com", "Alice", "private-token"}, now, disabled);
+        ApiController controller(db, {"route-user", "alice@example.com", "Alice", "private-token"}, now, nullptr, disabled);
         check(controller.handle(request)["enabled"] == false, "Status endpoint reports configuration without secrets");
         request.method = "POST"; request.path = "/api/forecast/ai"; request.body = "{}";
         check(controller.handle(request)["source"] == "baseline", "Controller supports the new read-only POST");

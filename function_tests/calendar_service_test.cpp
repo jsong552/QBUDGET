@@ -1,9 +1,11 @@
 /*
+ * File: calendar_service_test.cpp
  * Description: Function tests for CalendarService and RecurrenceService (Use Case 4:
  *              CreateCalendarEvent). Covers creating, listing, updating and removing payment
  *              events, upcoming/urgent payments, recurring dates (weekly, monthly, month-end),
- *              end dates and pausing, and generating transactions without duplicates.
- *              Uses the in-memory test store.
+ *              end dates and pausing, and generating transactions without duplicates,
+ *              including after a schedule's start date or frequency is edited (rent and
+ *              paycheque), with deleted and hand-edited months. Uses the in-memory test store.
  */
 #include "../backend/src/calendar_service.hpp"
 #include "../backend/tests/memory_store.hpp"
@@ -53,6 +55,24 @@ CalendarEvent event(const std::string &title, const std::string &date, MoneyCent
 RecurringEntry schedule(const std::string &start, RecurrenceFrequency frequency = RecurrenceFrequency::Monthly,
                         std::optional<Date> end = std::nullopt, const std::string &category = "rent") {
     return {"", "Rent", category, TransactionType::Expense, -90000, Date(start), end, frequency, true};
+}
+
+RecurringEntry paycheque(const std::string &start, RecurrenceFrequency frequency = RecurrenceFrequency::Monthly) {
+    return {"", "Paycheque", "income", TransactionType::Income, 120000, Date(start), std::nullopt, frequency, true};
+}
+
+// Ids of the generated transactions the user can see (deleted/voided ones left out), oldest first.
+std::vector<std::string> visibleIds(const TransactionService &transactions) {
+    std::vector<std::string> ids;
+    for (const auto &row : transactions.list())
+        ids.push_back(row.id);
+    std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
+bool isVoided(const TransactionRepository &repo, const std::string &id) {
+    auto row = repo.find(id);
+    return row && row->voided;
 }
 
 struct Setup {
@@ -244,6 +264,102 @@ int main() {
         fails(400, [&] { s.recurring.create(schedule("2026-09-01", RecurrenceFrequency::Monthly, Date("2026-08-01"))); },
               "Ends before it starts");
         fails(404, [&] { s.recurring.update("missing", schedule("2026-09-01")); }, "Editing a missing entry");
+    });
+
+    // Regression tests for TEST_REPORT.md bug B2: editing a schedule's start date or frequency used
+    // to leave the old schedule's generated transactions behind, charging a month twice.
+    test("Moving rent's start date back doesn't leave the old month behind", [] {
+        Setup s;
+        auto id = s.recurring.create(schedule("2026-11-08"));
+        s.recurring.sync(now);
+        check(visibleIds(s.transactions).size() == 1, "First sync: Nov 8 rent only");
+        s.recurring.update(id, schedule("2026-09-01")); // "my lease started in September"
+        s.recurring.sync(now);
+        auto p = "rec_" + id + "_";
+        check(visibleIds(s.transactions) == std::vector<std::string>{p + "2026-09-01", p + "2026-10-01", p + "2026-11-01"},
+              "Sep 1, Oct 1 and Nov 1 only");
+        check(isVoided(s.transactionRepo, p + "2026-11-08"), "Old Nov 8 rent is voided, not deleted");
+        check(Ledger(s.transactionRepo.list(), now).totals().expensesCents == 270000, "Spending is 3 x $900, not 4");
+        check(s.recurring.sync(now) == 0 && visibleIds(s.transactions).size() == 3, "Syncing again changes nothing");
+    });
+
+    test("Moving a paycheque's start date back doesn't leave the old payday behind", [] {
+        Setup s;
+        auto id = s.recurring.create(paycheque("2026-11-05"));
+        s.recurring.sync(now);
+        s.recurring.update(id, paycheque("2026-09-15"));
+        s.recurring.sync(now);
+        auto p = "rec_" + id + "_";
+        check(visibleIds(s.transactions) == std::vector<std::string>{p + "2026-09-15", p + "2026-10-15"},
+              "Sep 15 and Oct 15 only (Nov 15 isn't due yet)");
+        check(isVoided(s.transactionRepo, p + "2026-11-05"), "Old Nov 5 payday is voided");
+        check(Ledger(s.transactionRepo.list(), now).totals().incomeCents == 240000, "Income is 2 x $1200, not 3");
+    });
+
+    test("Changing rent from monthly to weekly keeps only the weekly dates", [] {
+        Setup s;
+        auto id = s.recurring.create(schedule("2026-10-01"));
+        s.recurring.sync(now); // Oct 1 and Nov 1
+        s.recurring.update(id, schedule("2026-10-01", RecurrenceFrequency::Weekly));
+        s.recurring.sync(now);
+        auto p = "rec_" + id + "_";
+        check(visibleIds(s.transactions) == std::vector<std::string>{p + "2026-10-01", p + "2026-10-08", p + "2026-10-15",
+                                                                     p + "2026-10-22", p + "2026-10-29", p + "2026-11-05"},
+              "Oct 1, 8, 15, 22, 29 and Nov 5");
+        check(isVoided(s.transactionRepo, p + "2026-11-01"), "Monthly Nov 1 rent is voided");
+        check(Ledger(s.transactionRepo.list(), now).totals().expensesCents == 540000, "Spending is 6 x $900, not 7");
+    });
+
+    test("Changing a paycheque from monthly to weekly keeps only the weekly dates", [] {
+        Setup s;
+        auto id = s.recurring.create(paycheque("2026-10-02"));
+        s.recurring.sync(now); // Oct 2 and Nov 2
+        s.recurring.update(id, paycheque("2026-10-02", RecurrenceFrequency::Weekly));
+        s.recurring.sync(now);
+        auto p = "rec_" + id + "_";
+        check(visibleIds(s.transactions) == std::vector<std::string>{p + "2026-10-02", p + "2026-10-09", p + "2026-10-16",
+                                                                     p + "2026-10-23", p + "2026-10-30", p + "2026-11-06"},
+              "Oct 2, 9, 16, 23, 30 and Nov 6");
+        check(isVoided(s.transactionRepo, p + "2026-11-02"), "Monthly Nov 2 payday is voided");
+        check(Ledger(s.transactionRepo.list(), now).totals().incomeCents == 720000, "Income is 6 x $1200, not 7");
+    });
+
+    test("A month the user deleted stays deleted after the schedule is edited", [] {
+        Setup s;
+        auto id = s.recurring.create(schedule("2026-09-01"));
+        s.recurring.sync(now); // Sep 1, Oct 1, Nov 1
+        auto p = "rec_" + id + "_";
+        s.transactions.remove(p + "2026-09-01");
+        s.recurring.update(id, schedule("2026-09-01", RecurrenceFrequency::Weekly));
+        s.recurring.sync(now);
+        check(isVoided(s.transactionRepo, p + "2026-09-01"), "Deleted Sep 1 is still deleted (it's also a weekly date)");
+        check(isVoided(s.transactionRepo, p + "2026-10-01") && isVoided(s.transactionRepo, p + "2026-11-01"),
+              "Monthly Oct 1 and Nov 1 voided");
+        check(visibleIds(s.transactions).size() == 9, "Weekly Sep 8 to Nov 3 = 9 visible (10 dates minus deleted Sep 1)");
+        check(s.recurring.sync(now) == 0 && visibleIds(s.transactions).size() == 9, "Syncing again doesn't bring Sep 1 back");
+    });
+
+    test("Hand-edited months: kept if still a schedule date, voided if not", [] {
+        // The fix doesn't track hand edits. It keeps a generated transaction while its date is still
+        // one of the schedule's dates, and voids it (like a delete) once it isn't, edited or not.
+        Setup s;
+        auto id = s.recurring.create(schedule("2026-10-01"));
+        s.recurring.sync(now); // Oct 1 and Nov 1
+        auto p = "rec_" + id + "_";
+        auto october = *s.transactionRepo.find(p + "2026-10-01");
+        october.amountCents = -95000;
+        october.note = "Paid with a $50 late fee";
+        s.transactions.update(october.id, october);
+        auto november = *s.transactionRepo.find(p + "2026-11-01");
+        november.note = "Paid by e-transfer";
+        s.transactions.update(november.id, november);
+        s.recurring.update(id, schedule("2026-10-01", RecurrenceFrequency::Weekly));
+        s.recurring.sync(now);
+        auto kept = s.transactionRepo.find(p + "2026-10-01");
+        check(kept && !kept->voided && kept->amountCents == -95000 && kept->note == "Paid with a $50 late fee",
+              "Edited Oct 1 (also a weekly date) keeps the user's amount and note");
+        check(isVoided(s.transactionRepo, p + "2026-11-01"), "Edited Nov 1 (not a weekly date) is voided anyway");
+        check(visibleIds(s.transactions).size() == 6, "6 weekly rows, no duplicate November rent");
     });
 
     std::cout << '\n' << checks - failures << '/' << checks << " Calendar and Recurrence checks passed.\n";
