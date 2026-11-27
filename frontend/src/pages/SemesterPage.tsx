@@ -123,7 +123,7 @@ function SemesterStats({ summary, rates }: { summary: SemesterSummary; rates: Tu
       <div className="mt-6 grid grid-cols-3 gap-5">
         <StatCard tone="success" icon={ArrowUp} label="Expected income" value={formatMoney(summary.expectedIncomeCents)} caption="Includes approved bursaries" />
         <StatCard tone="primary" icon={GraduationCap} label="Estimated tuition" value={formatMoney(summary.estimatedTuitionCents)} caption={<TuitionCaption summary={summary} rates={rates} />} />
-        <StatCard tone="danger" icon={ArrowDown} label="Planned costs" value={formatMoney(summary.plannedCostsCents)} caption="Tuition, payments and kept fees" />
+        <StatCard tone="danger" icon={ArrowDown} label="Planned costs" value={formatMoney(summary.plannedCostsCents)} caption="Tuition, scheduled costs and kept fees" />
       </div>
       <div className="mt-5 grid grid-cols-3 gap-5">
         <StatCard

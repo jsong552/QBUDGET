@@ -61,7 +61,7 @@ class StudentService {
                     kept = addMoney(kept, fee.amountCents);
             }
         for (const auto &event : events)
-            if (!event.paid && range.contains(event.date) && event.kind != "tuition")
+            if (range.contains(event.date) && event.kind != "tuition")
                 scheduled = addMoney(scheduled, event.amountCents);
         // A rate the student entered always wins; the built-in estimate only fills in when it is left at 0.
         MoneyCents rate = value.tuitionPerCourseCents;

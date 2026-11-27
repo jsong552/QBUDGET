@@ -292,10 +292,12 @@ class ApiController {
         if (req.path == "/api/semester/rates")
             return tuitionRatesJson();
         if (req.path == "/api/semester") {
-            if (req.method == "GET")
-                return {{"summary", students.summary(now, calendar.list())},
+            if (req.method == "GET") {
+                auto plan = students.plan(now);
+                return {{"summary", students.summary(now, planner().eventsIn({plan.startDate, plan.endDate}))},
                         {"bursaries", students.listBursaries()},
                         {"fees", students.listFees()}};
+            }
             if (req.method == "PUT") {
                 students.savePlan(body(req).get<SemesterPlan>());
                 return nullptr;
