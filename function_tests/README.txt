@@ -209,6 +209,33 @@ CalendarService and RecurrenceService test (calendar_service_test.cpp)
     starts, or editing/removing a missing schedule.
     Output: rejected.
 
+Tests 19 to 24 check bug B2 from the test report: changing a schedule's
+first date or how often it repeats used to leave the old transactions
+behind, so a month got charged twice. Old ones are now "voided" (hidden,
+like a delete) when sync runs.
+
+19. Rent starting Nov 8, synced, then the first date moved back to Sep 1.
+    Output: rent on Sep 1, Oct 1 and Nov 1 only ($2700). The Nov 8 one is
+    voided. Syncing again changes nothing.
+20. $1200 paycheque starting Nov 5, then moved back to Sep 15.
+    Output: Sep 15 and Oct 15 only ($2400). The Nov 5 one is voided.
+21. Monthly rent from Oct 1 changed to weekly.
+    Output: Oct 1, 8, 15, 22, 29 and Nov 5 ($5400). The monthly Nov 1 one
+    is voided.
+22. Monthly paycheque from Oct 2 changed to weekly.
+    Output: Oct 2, 9, 16, 23, 30 and Nov 6 ($7200). The monthly Nov 2 one
+    is voided.
+23. Delete September's rent, then change the schedule to weekly.
+    Output: Sep 1 stays deleted even though it's also a weekly date, the
+    monthly Oct 1 and Nov 1 are voided, and 9 weekly rows show. It doesn't
+    come back on the next sync.
+24. Edit October's rent by hand ($950 and a note) and November's note,
+    then change the schedule to weekly.
+    Output: October keeps the $950 and the note because Oct 1 is still a
+    weekly date. November is voided even though it was edited, because
+    Nov 1 isn't a weekly date. (The app doesn't remember which rows were
+    edited by hand.)
+
 
 ForecastService test (forecast_service_test.cpp)
 ------------------------------------------------
@@ -257,9 +284,27 @@ StudentService test (student_service_test.cpp)
    $6120, short by $620.
 6. Opted out of a $250 and a $40 fee.
    Output: $290 saved. Only the kept fee is a cost.
-7. A fee from last year, a paid payment, a tuition payment and a January
-   payment.
-   Output: none of them are counted.
+7. A fee from last year, a paid November payment, a tuition payment and a
+   January payment.
+   Output: only the paid November payment is counted ($900). Paid
+   payments still count as semester costs. The tuition payment is left
+   out because tuition is estimated separately.
+
+Tests 8 to 10 check bug B6 from the test report: the semester summary
+left out recurring costs. They go through the real /api/semester route.
+
+8. $900 monthly rent from Sep 1.
+   Output: $3600 of scheduled costs (Sep, Oct, Nov and Dec). Jan 1 is
+   next term. It's the same total the Calendar shows for Sep to Dec.
+9. A sublet from Jul 1 to Oct 15, a lease that ended Aug 1, rent starting
+   Jan 1, a paused weekly gym and a monthly paycheque.
+   Output: only the sublet's Sep 1 and Oct 1 count ($1400). The paycheque
+   isn't a cost and isn't added to income.
+10. Monthly rent that's been synced (Sep to Nov are transactions), a $60
+    textbook that was recorded as paid, an unpaid $25 gym payment and a
+    tuition payment.
+    Output: $3685 = 4 x $900 + $60 + $25. Each payment is counted once,
+    even when it's also a transaction, and tuition is left out.
 
 
 ProfileService and SettingsService test (profile_settings_test.cpp)
@@ -473,13 +518,14 @@ passes, the totals are:
   account_deletion_test      30/30 Account deletion checks passed.
   auth_service_test          34/34 AuthService checks passed.
   budget_service_test        31/31 BudgetService checks passed.
-  calendar_service_test      45/45 Calendar and Recurrence checks passed.
+  calendar_service_test      66/66 Calendar and Recurrence checks passed.
   category_service_test      30/30 CategoryService checks passed.
   date_test                  47/47 Date checks passed.
-  forecast_service_test      33/33 ForecastService checks passed.
+  forecast_service_test      39/39 ForecastService checks passed.
+  gemini_forecast_test       63 Gemini checks passed.
   notification_service_test  28/28 NotificationService checks passed.
   profile_settings_test      66/66 Profile and Settings checks passed.
-  student_service_test       21/21 StudentService checks passed.
+  student_service_test       28/28 StudentService checks passed.
   transaction_service_test   39/39 TransactionService checks passed.
   validation_test            44/44 Validation checks passed.
 
